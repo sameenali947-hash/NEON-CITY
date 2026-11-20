@@ -5,207 +5,152 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>VICE CITY</title>
 <style>
-  body{margin:0;overflow:hidden;background:#111;font-family:'Segoe UI',sans-serif;color:#fff;user-select:none}
-  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
-  #speedo{position:absolute;bottom:20px;left:20px;font-size:50px;font-weight:900;color:#fff;text-shadow:0 0 20px #ff00ff, 0 2px 5px #000;display:none;font-style:italic}
-  #speedo span{font-size:16px;color:#00ffff;text-shadow:0 0 10px #00ffff}
+  body{margin:0;overflow:hidden;background:#000;font-family:sans-serif;color:#fff;user-select:none}
+  #speedo{position:fixed;bottom:20px;left:20px;font-size:50px;font-weight:900;color:#fff;text-shadow:0 0 20px #ff00ff, 0 2px 5px #000;display:none;font-style:italic;z-index:10}
+  #speedo span{font-size:16px;color:#00ffff}
   #overlay{position:fixed;inset:0;background:linear-gradient(to bottom, #2a0845, #6441A5);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;cursor:pointer}
-  #overlay h1{font-size:70px;margin-bottom:10px;color:#ff00ff;text-shadow:0 0 30px #ff00ff, 0 0 10px #fff;letter-spacing:5px;font-style:italic}
-  #overlay p{font-size:20px;color:#00ffff;text-shadow:0 0 10px #00ffff}
+  #overlay h1{font-size:60px;margin-bottom:10px;color:#ff00ff;text-shadow:0 0 30px #ff00ff;font-style:italic}
+  #overlay p{font-size:20px;color:#00ffff}
 </style>
 </head>
 <body>
-<div id="hud"><div id="speedo">0 <span>MPH</span></div></div>
+<div id="speedo">0 <span>MPH</span></div>
 <div id="overlay"><h1>VICE CITY</h1><p>Click to drive</p></div>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.160.1/build/three.module.js",
-    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
-  }
-}
-</script>
+<!-- ONLY ONE LIBRARY (No imports needed) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-<script type="module">
-import * as THREE from 'three';
-import * as CANNON from 'cannon-es';
-
-// 1. Scene & Renderer (Simple, stable, no crashes)
+<script>
+// 1. Setup Scene
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xff7597); // Pink Sunset
+scene.background = new THREE.Color(0xff7597); // Pink sky
 scene.fog = new THREE.Fog(0xff7597, 50, 300);
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: false }); // Antialias off for school laptops
-renderer.setSize(innerWidth, innerHeight);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// 2. Bright Lights
+// 2. Lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.position.set(50, 100, 50);
 scene.add(sun);
 
-// 3. Physics World
-const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -20, 0) });
-world.broadphase = new CANNON.SAPBroadphase(world);
-
-// 4. Ground & Roads
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+// 3. Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(1000, 1000),
+  new THREE.MeshBasicMaterial({ color: 0x222222 })
+);
 ground.rotation.x = -Math.PI/2;
 scene.add(ground);
-world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), quaternion: new CANNON.Quaternion().setFromEuler(-Math.PI/2, 0, 0) }));
 
-// 5. Build the City
-const neonColors = [0xff00ff, 0x00ffff, 0xffaa00];
-for(let x = -150; x <= 150; x += 40) {
-  for(let z = -150; z <= 150; z += 40) {
-    if(Math.abs(x) < 15 && Math.abs(z) < 15) continue; // Spawn area clear
-
-    // Building
-    const h = Math.random() * 40 + 15;
-    const w = Math.random() * 12 + 8;
-    const d = Math.random() * 12 + 8;
-    const bMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: 0x222233 }));
-    bMesh.position.set(x, h/2, z);
-    scene.add(bMesh);
-    world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)), position: new CANNON.Vec3(x, h/2, z) }));
-
-    // Neon sign
-    if(Math.random() > 0.4) {
-      const neon = new THREE.Mesh(new THREE.BoxGeometry(w+0.5, 1.5, d+0.5), new THREE.MeshBasicMaterial({ color: neonColors[Math.floor(Math.random()*3)] }));
+// 4. City Buildings
+const buildings = [];
+for(let x = -100; x <= 100; x += 30) {
+  for(let z = -100; z <= 100; z += 30) {
+    if(x === 0 && z === 0) continue;
+    
+    const h = Math.random() * 40 + 10;
+    const color = Math.random() > 0.5 ? 0x222233 : 0x332244;
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(15, h, 15),
+      new THREE.MeshBasicMaterial({ color: color })
+    );
+    box.position.set(x, h/2, z);
+    scene.add(box);
+    
+    // Neon strips
+    if(Math.random() > 0.5) {
+      const neon = new THREE.Mesh(
+        new THREE.BoxGeometry(16, 2, 16),
+        new THREE.MeshBasicMaterial({ color: Math.random() > 0.5 ? 0xff00ff : 0x00ffff })
+      );
       neon.position.set(x, Math.random()*h, z);
       scene.add(neon);
-    }
-
-    // Palm Trees
-    if(Math.random() > 0.5) {
-      const tree = new THREE.Group();
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 10), new THREE.MeshStandardMaterial({ color: 0x4a3020 }));
-      trunk.position.y = 5; tree.add(trunk);
-      const leafMat = new THREE.MeshStandardMaterial({ color: 0x116611, side: THREE.DoubleSide });
-      for(let l=0; l<5; l++) {
-        const leaf = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), leafMat);
-        leaf.position.y = 10; leaf.rotation.y = (l/5)*Math.PI*2; leaf.rotation.x = Math.PI/4;
-        leaf.position.x = Math.cos(leaf.rotation.y)*3; leaf.position.z = Math.sin(leaf.rotation.y)*3;
-        tree.add(leaf);
-      }
-      tree.position.set(x + 10, 0, z + 10);
-      scene.add(tree);
     }
   }
 }
 
-// 6. Player Car (Detailed)
-const carGroup = new THREE.Group();
-const whitePaint = new THREE.MeshStandardMaterial({ color: 0xffffff });
-const redPaint = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-const glassMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
-const rubberMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+// 5. Player Car
+const car = new THREE.Group();
+const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+body.position.y = 0.5;
+const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.55, 4), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+stripe.position.y = 0.5;
+const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.6, 1.5), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+windshield.position.set(0, 1, -0.2);
+car.add(body, stripe, windshield);
+scene.add(car);
 
-const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 0.4, 4), whitePaint); bodyMesh.position.y = 0.6;
-const hood = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.2, 1.2), whitePaint); hood.position.set(0, 0.7, 1.4);
-const trunk = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.2, 1.0), whitePaint); trunk.position.set(0, 0.7, -1.5);
-const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.45, 4), redPaint); stripe.position.set(0, 0.62, 0);
-const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 2.0), glassMat); cabin.position.set(0, 1.1, -0.2);
-const hlL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff })); hlL.position.set(0.6, 0.6, 2.05);
-const hlR = hlL.clone(); hlR.position.x = -0.6;
-const tl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xff0000 })); tl.position.set(0, 0.6, -2.05);
-carGroup.add(bodyMesh, hood, trunk, stripe, cabin, hlL, hlR, tl);
+// 6. Custom Simple Physics (No Cannon-es needed!)
+let carPos = new THREE.Vector3(0, 0, 0);
+let carAngle = 0;
+let carSpeed = 0;
 
-// Wheels
-const wheels = [];
-const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 12);
-wheelGeo.rotateZ(Math.PI/2);
-[[1, 0.4, 1.3], [-1, 0.4, 1.3], [1, 0.4, -1.3], [-1, 0.4, -1.3]].forEach(pos => {
-  const wheel = new THREE.Mesh(wheelGeo, rubberMat);
-  wheel.position.set(pos[0], pos[1], pos[2]);
-  carGroup.add(wheel);
-  wheels.push(wheel);
-});
-scene.add(carGroup);
-
-// Car Physics
-const carBody = new CANNON.Body({ mass: 150, linearDamping: 0.5, angularDamping: 0.8 });
-carBody.addShape(new CANNON.Box(new CANNON.Vec3(1, 0.4, 2)));
-carBody.position.set(0, 2, 0);
-world.addBody(carBody);
-
-// 7. Controls (FIXED CAMERA DIRECTION)
 const keys = { w: false, a: false, s: false, d: false };
-let camAngle = 0; // Starts looking at the back of the car
-const overlay = document.getElementById('overlay');
 
+// Click to start
+const overlay = document.getElementById('overlay');
 overlay.addEventListener('click', () => {
   overlay.style.display = 'none';
   document.getElementById('speedo').style.display = 'block';
-  renderer.domElement.requestPointerLock();
 });
 
-document.addEventListener('mousemove', (e) => { 
-  if (document.pointerLockElement === renderer.domElement) camAngle -= e.movementX * 0.002; 
-});
-
+// Keyboard
 window.addEventListener('keydown', (e) => {
-  const k = e.key.toLowerCase();
-  if (['w', 'a', 's', 'd'].includes(k)) keys[k] = true;
+  if(e.key.toLowerCase() === 'w') keys.w = true;
+  if(e.key.toLowerCase() === 'a') keys.a = true;
+  if(e.key.toLowerCase() === 's') keys.s = true;
+  if(e.key.toLowerCase() === 'd') keys.d = true;
 });
 window.addEventListener('keyup', (e) => {
-  const k = e.key.toLowerCase();
-  if (['w', 'a', 's', 'd'].includes(k)) keys[k] = false;
+  if(e.key.toLowerCase() === 'w') keys.w = false;
+  if(e.key.toLowerCase() === 'a') keys.a = false;
+  if(e.key.toLowerCase() === 's') keys.s = false;
+  if(e.key.toLowerCase() === 'd') keys.d = false;
 });
 
-// 8. Game Loop
-const clock = new THREE.Clock();
-const forceVec = new CANNON.Vec3();
-const forward = new CANNON.Vec3();
-
+// 7. Game Loop
 function animate() {
   requestAnimationFrame(animate);
-  world.step(1/60, Math.min(clock.getDelta(), 0.1), 3);
 
-  // Sync Car
-  carGroup.position.copy(carBody.position);
-  carGroup.quaternion.copy(carBody.quaternion);
+  // Driving Logic (W goes forward!)
+  if (keys.w) carSpeed += 0.5;
+  else if (keys.s) carSpeed -= 0.5;
+  else carSpeed *= 0.95; // Friction
 
-  // Keep Car Flat
-  carBody.angularVelocity.x = 0;
-  carBody.angularVelocity.z = 0;
-  carBody.quaternion.setFromEuler(0, carBody.quaternion.toEuler().y, 0);
+  // Steering (Only turn if moving)
+  if (Math.abs(carSpeed) > 0.5) {
+    if (keys.a) carAngle += 0.05;
+    if (keys.d) carAngle -= 0.05;
+  }
 
-  // Driving
-  forward.set(0, 0, 1);
-  carBody.quaternion.vmult(forward, forward);
-  
-  if (keys.w) { forward.scale(2000, forceVec); carBody.applyForce(forceVec, carBody.position); }
-  if (keys.s) { forward.scale(-1000, forceVec); carBody.applyForce(forceVec, carBody.position); }
-  
-  // Steering
-  if (keys.a) carBody.angularVelocity.y = 2;
-  else if (keys.d) carBody.angularVelocity.y = -2;
-  else carBody.angularVelocity.y = 0;
+  // Move the car based on angle
+  carPos.x += Math.sin(carAngle) * carSpeed;
+  carPos.z += Math.cos(carAngle) * carSpeed;
 
-  // Spin Wheels visually
-  wheels.forEach(w => w.rotation.x += carBody.velocity.length() * 0.1);
+  // Update car position on screen
+  car.position.copy(carPos);
+  car.rotation.y = carAngle;
 
   // Camera Follow
-  const camDist = 12;
-  camera.position.x = carBody.position.x - Math.sin(camAngle) * camDist;
-  camera.position.z = carBody.position.z - Math.cos(camAngle) * camDist;
-  camera.position.y = carBody.position.y + 5;
-  camera.lookAt(carBody.position.x, carBody.position.y + 1, carBody.position.z);
+  camera.position.x = carPos.x - Math.sin(carAngle) * 12;
+  camera.position.z = carPos.z - Math.cos(carAngle) * 12;
+  camera.position.y = 6;
+  camera.lookAt(carPos.x, 1, carPos.z);
 
-  // HUD
-  document.getElementById('speedo').innerHTML = Math.floor(carBody.velocity.length() * 2.2) + ' <span>MPH</span>';
+  // Update Speedometer
+  document.getElementById('speedo').innerHTML = Math.floor(Math.abs(carSpeed) * 3) + ' <span>MPH</span>';
 
   renderer.render(scene, camera);
 }
 
+// Handle window resize
 window.addEventListener('resize', () => {
-  camera.aspect = innerWidth/innerHeight;
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
 animate();
