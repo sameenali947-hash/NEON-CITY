@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>VICE CITY</title>
 <style>
-  body{margin:0;overflow:hidden;background:#000;font-family:sans-serif;color:#fff;user-select:none}
+  body{margin:0;overflow:hidden;background:#111;font-family:'Segoe UI',sans-serif;color:#fff;user-select:none}
   #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
-  #speedo{position:absolute;bottom:20px;left:20px;font-size:60px;font-weight:bold;color:#fff;text-shadow:0 0 15px #ff00ff;display:none;font-style:italic}
-  #speedo span{font-size:20px;color:#0ff;text-shadow:0 0 10px #0ff}
-  #overlay{position:fixed;inset:0;background:linear-gradient(to bottom, #2a0845, #ff7597);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;cursor:pointer}
-  h1{font-size:80px;margin:0 0 10px;color:#fff;text-shadow:0 0 30px #ff00ff, 0 0 10px #fff;font-style:italic;letter-spacing:5px}
-  p{font-size:24px;color:#0ff;text-shadow:0 0 10px #0ff}
+  #speedo{position:absolute;bottom:20px;left:20px;font-size:60px;font-weight:900;color:#fff;text-shadow:0 0 20px #ff00ff, 0 2px 5px #000;display:none;font-style:italic}
+  #speedo span{font-size:16px;color:#00ffff;text-shadow:0 0 10px #00ffff}
+  #overlay{position:fixed;inset:0;background:linear-gradient(to bottom, rgba(20,0,40,0.9), rgba(0,0,0,0.9));display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;cursor:pointer}
+  #overlay h1{font-size:80px;margin-bottom:10px;color:#ff00ff;text-shadow:0 0 30px #ff00ff, 0 0 10px #fff;letter-spacing:5px;font-style:italic}
+  #overlay p{font-size:20px;color:#00ffff;text-shadow:0 0 10px #00ffff}
 </style>
 </head>
 <body>
@@ -31,106 +31,154 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 
-// 1. Scene Setup
+// --- Setup Scene ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xff7597); // Sunset pink
-scene.fog = new THREE.Fog(0xff7597, 50, 400);
+scene.fog = new THREE.Fog(0xff0077, 50, 350); // Pink sunset fog
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
 document.body.appendChild(renderer.domElement);
 
-// 2. Lights (Bright so you can see)
-scene.add(new THREE.AmbientLight(0xffffff, 0.8)); // Bright ambient light
-const sun = new THREE.DirectionalLight(0xffaa88, 2.0);
-sun.position.set(50, 100, 50);
-sun.castShadow = true;
-sun.shadow.camera.left = -100;
-sun.shadow.camera.right = 100;
-sun.shadow.camera.top = 100;
-sun.shadow.camera.bottom = -100;
-scene.add(sun);
+// --- Sunset Sky Gradient ---
+const skyGeo = new THREE.SphereGeometry(500, 32, 15);
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: { top: { value: new THREE.Color(0x1a0033) }, bottom: { value: new THREE.Color(0xff7597) } },
+  vertexShader: `varying vec3 vWorldPosition; void main() { vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform vec3 top; uniform vec3 bottom; varying vec3 vWorldPosition; void main() { float h = normalize(vWorldPosition).y; gl_FragColor = vec4(mix(bottom, top, max(pow(max(h, 0.0), 0.5), 0.0)), 1.0); }`,
+  side: THREE.BackSide
+});
+const sky = new THREE.Mesh(skyGeo, skyMat);
+sky.frustumCulled = false;
+scene.add(sky);
 
-// 3. Physics World
+// --- Lights ---
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const sun = new THREE.DirectionalLight(0xffaa88, 1.5);
+sun.position.set(-50, 50, -50); 
+sun.castShadow = true;
+sun.shadow.camera.left = -100; sun.shadow.camera.right = 100;
+sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
+scene.add(sun);
+// Neon Street Lights
+const pinkLight = new THREE.PointLight(0xff00ff, 2, 150); pinkLight.position.set(0, 20, 0); scene.add(pinkLight);
+const cyanLight = new THREE.PointLight(0x00ffff, 2, 150); cyanLight.position.set(40, 20, 40); scene.add(cyanLight);
+
+// --- Physics World ---
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -20, 0) });
 world.broadphase = new CANNON.SAPBroadphase(world);
 
-// 4. Ground & Ocean
-const groundMat = new THREE.MeshStandardMaterial({ color: 0x333333 }); // Grey road
+// --- Ground (Wet Road) ---
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.8 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), groundMat);
-ground.rotation.x = -Math.PI/2;
-ground.receiveShadow = true;
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
 scene.add(ground);
 world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), quaternion: new CANNON.Quaternion().setFromEuler(-Math.PI/2, 0, 0) }));
 
-// Water
-const water = new THREE.Mesh(new THREE.PlaneGeometry(300, 1000), new THREE.MeshStandardMaterial({ color: 0x112244 }));
-water.rotation.x = -Math.PI/2; water.position.set(-200, 0.1, 0);
-scene.add(water);
+// --- City Generation (Roads, Buildings, Palms) ---
+const buildingColors = [0x222233, 0x332244, 0x111122];
+const windowMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
+const neonPink = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+const neonCyan = new THREE.MeshBasicMaterial({ color: 0x00ffff });
 
-// 5. City Generation (Buildings + Palms + Neon)
-const neonColors = [0xff00ff, 0x00ffff, 0xffaa00];
-for(let x = -150; x <= 150; x += 40) {
-  for(let z = -150; z <= 150; z += 40) {
-    if(Math.abs(x) < 20 && Math.abs(z) < 20) continue; // Clear spawn
-    
-    // Building
+for(let x = -150; x <= 150; x += 45) {
+  for(let z = -150; z <= 150; z += 45) {
+    if(Math.abs(x) < 15 && Math.abs(z) < 15) continue; // Spawn clear
+
+    // Buildings
     const h = Math.random() * 50 + 20;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(15, h, 15), new THREE.MeshStandardMaterial({ color: 0x222233 }));
-    b.position.set(x, h/2, z); b.castShadow = true; b.receiveShadow = true;
-    scene.add(b);
-    world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(7.5, h/2, 7.5)), position: new CANNON.Vec3(x, h/2, z) }));
+    const w = Math.random() * 15 + 10;
+    const d = Math.random() * 15 + 10;
+    const bMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: buildingColors[Math.floor(Math.random()*3)], roughness: 0.5 }));
+    bMesh.position.set(x, h/2, z); bMesh.castShadow = true; bMesh.receiveShadow = true;
+    scene.add(bMesh);
+    world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)), position: new CANNON.Vec3(x, h/2, z) }));
 
-    // Bright Neon Strip
-    if(Math.random() > 0.3) {
-      const neon = new THREE.Mesh(new THREE.BoxGeometry(15.5, 2, 15.5), new THREE.MeshBasicMaterial({ color: neonColors[Math.floor(Math.random()*3)] }));
-      neon.position.set(x, Math.random()*h, z);
-      scene.add(neon);
+    // Glowing Windows
+    for(let i=0; i<6; i++) {
+      const win = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 0.5), windowMat);
+      win.position.set(x + (Math.random()>0.5?w/2:-w/2), Math.random()*h, z + (Math.random()>0.5?d/2:-d/2));
+      if(Math.random() > 0.5) win.rotation.y = Math.PI/2;
+      scene.add(win);
     }
 
-    // Palm Tree
-    if(Math.random() > 0.5) {
+    // Neon Signs
+    if(Math.random() > 0.4) {
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(w+0.5, 2, d+0.5), Math.random()>0.5?neonPink:neonCyan);
+      sign.position.set(x, Math.random()*h, z);
+      scene.add(sign);
+    }
+
+    // Palm Trees
+    if(Math.random() > 0.6) {
       const tree = new THREE.Group();
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 10), new THREE.MeshStandardMaterial({ color: 0x5c4033 }));
-      trunk.position.y = 5; tree.add(trunk);
-      const leaves = new THREE.MeshStandardMaterial({ color: 0x116611, side: THREE.DoubleSide });
-      for(let l=0; l<4; l++) {
-        const leaf = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5), leaves);
-        leaf.position.y = 10; leaf.rotation.y = (l/4)*Math.PI*2; leaf.rotation.x = Math.PI/4;
-        leaf.position.x = Math.cos(leaf.rotation.y)*3; leaf.position.z = Math.sin(leaf.rotation.y)*3;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.6, 12), new THREE.MeshStandardMaterial({ color: 0x4a3020 }));
+      trunk.position.y = 6; trunk.rotation.z = (Math.random()-0.5)*0.2; tree.add(trunk);
+      const leafMat = new THREE.MeshStandardMaterial({ color: 0x115511, side: THREE.DoubleSide });
+      for(let l=0; l<6; l++) {
+        const leaf = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.5), leafMat);
+        leaf.position.y = 12; leaf.rotation.y = (l/6)*Math.PI*2; leaf.rotation.x = Math.PI/4;
+        leaf.position.x = Math.cos(leaf.rotation.y)*4; leaf.position.z = Math.sin(leaf.rotation.y)*4;
         tree.add(leaf);
       }
-      tree.position.set(x + 12, 0, z + 12);
+      tree.position.set(x + w/2 + 2, 0, z + d/2 + 2);
       scene.add(tree);
     }
   }
 }
 
-// 6. Player Car (White with Red Stripe)
+// --- Detailed Player Car (White with Red Stripe) ---
 const carGroup = new THREE.Group();
-const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.6, 4.5), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+const whitePaint = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.7, roughness: 0.1 });
+const redPaint = new THREE.MeshStandardMaterial({ color: 0xdd0000, metalness: 0.5, roughness: 0.2 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0x050510, metalness: 0.9, roughness: 0.0 });
+const rubberMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+
+// Main Body
+const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 4.2), whitePaint);
 bodyMesh.position.y = 0.6; bodyMesh.castShadow = true;
-const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.61, 4.5), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
-stripe.position.y = 0.6;
-const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.6, 2), new THREE.MeshStandardMaterial({ color: 0x000000 }));
-cabin.position.set(0, 1.2, -0.2);
-const lightL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-lightL.position.set(0.7, 0.6, 2.25);
-const lightR = lightL.clone(); lightR.position.x = -0.7;
-carGroup.add(bodyMesh, stripe, cabin, lightL, lightR);
+// Sloped hood/trunk
+const hood = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.2, 1.2), whitePaint); hood.position.set(0, 0.7, 1.4);
+const trunk = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.2, 1.0), whitePaint); trunk.position.set(0, 0.7, -1.5);
+// Red Stripe
+const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.45, 4.2), redPaint);
+stripe.position.set(0, 0.62, 0);
+// Cabin (Windshield)
+const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 2.0), glassMat);
+cabin.position.set(0, 1.1, -0.2); cabin.castShadow = true;
+// Headlights & Taillights
+const hlL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+hlL.position.set(0.6, 0.6, 2.1);
+const hlR = hlL.clone(); hlR.position.x = -0.6;
+const tl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+tl.position.set(0, 0.6, -2.1);
+carGroup.add(bodyMesh, hood, trunk, stripe, cabin, hlL, hlR, tl);
+
+// Wheels
+const wheels = [];
+const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
+wheelGeo.rotateZ(Math.PI/2);
+const wheelPositions = [ [1, 0.4, 1.3], [-1, 0.4, 1.3], [1, 0.4, -1.3], [-1, 0.4, -1.3] ];
+wheelPositions.forEach(pos => {
+  const wheel = new THREE.Mesh(wheelGeo, rubberMat);
+  wheel.position.set(pos[0], pos[1], pos[2]);
+  wheel.castShadow = true;
+  carGroup.add(wheel);
+  wheels.push(wheel);
+});
 scene.add(carGroup);
 
-// Car Physics
-const carBody = new CANNON.Body({ mass: 150, linearDamping: 0.8 }); // High damping for grip
-carBody.addShape(new CANNON.Box(new CANNON.Vec3(1.1, 0.3, 2.25)));
+// --- Car Physics ---
+const carBody = new CANNON.Body({ mass: 150, linearDamping: 0.9 }); 
+carBody.addShape(new CANNON.Box(new CANNON.Vec3(1.0, 0.4, 2.1)));
 carBody.position.set(0, 2, 0);
 world.addBody(carBody);
 
-// 7. Controls
+// --- Controls ---
 const keys = { w: false, a: false, s: false, d: false };
-let camAngle = Math.PI;
+let camAngle = 0; // FIXED: Starts facing the back of the car
 const overlay = document.getElementById('overlay');
 
 overlay.addEventListener('click', () => {
@@ -143,7 +191,6 @@ document.addEventListener('mousemove', (e) => {
   if (document.pointerLockElement === renderer.domElement) camAngle -= e.movementX * 0.002; 
 });
 
-// Bulletproof Keyboard Events
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (['w', 'a', 's', 'd'].includes(k)) keys[k] = true;
@@ -153,47 +200,53 @@ window.addEventListener('keyup', (e) => {
   if (['w', 'a', 's', 'd'].includes(k)) keys[k] = false;
 });
 
-// 8. Game Loop
+// --- Game Loop ---
 const clock = new THREE.Clock();
-const forceVec = new CANNON.Vec3();
-const forward = new CANNON.Vec3();
 
 function animate() {
   requestAnimationFrame(animate);
   world.step(1/60, Math.min(clock.getDelta(), 0.1), 3);
 
-  // Sync mesh to physics body
+  // Sync Car
   carGroup.position.copy(carBody.position);
   carGroup.quaternion.copy(carBody.quaternion);
 
-  // Keep car flat (no flipping)
+  // Keep Car Flat (No tipping over)
   carBody.angularVelocity.x = 0;
   carBody.angularVelocity.z = 0;
   carBody.quaternion.setFromEuler(0, carBody.quaternion.toEuler().y, 0);
 
-  // Driving logic using ApplyForce
-  forward.set(0, 0, 1);
+  // Driving Logic (Fixed W/S direction)
+  const speed = 30;
+  const reverseSpeed = 15;
+  const forward = new CANNON.Vec3(0, 0, 1);
   carBody.quaternion.vmult(forward, forward);
   
   if (keys.w) { 
-    forward.scale(3000, forceVec); 
-    carBody.applyForce(forceVec, carBody.position); 
-  }
-  if (keys.s) { 
-    forward.scale(-2000, forceVec); 
-    carBody.applyForce(forceVec, carBody.position); 
+    carBody.velocity.x = forward.x * speed; 
+    carBody.velocity.z = forward.z * speed; 
+  } else if (keys.s) { 
+    carBody.velocity.x = -forward.x * reverseSpeed; 
+    carBody.velocity.z = -forward.z * reverseSpeed; 
+  } else {
+    carBody.velocity.x *= 0.95; // Friction/braking
+    carBody.velocity.z *= 0.95;
   }
   
   // Steering
-  if (keys.a) carBody.angularVelocity.y = 2.5;
-  else if (keys.d) carBody.angularVelocity.y = -2.5;
+  if (keys.a && carBody.velocity.length() > 1) carBody.angularVelocity.y = 2.5;
+  else if (keys.d && carBody.velocity.length() > 1) carBody.angularVelocity.y = -2.5;
   else carBody.angularVelocity.y = 0;
 
-  // Camera
-  const camDist = 10;
+  // Spin Wheels visually
+  const wheelSpeed = carBody.velocity.length() * 0.5;
+  wheels.forEach(w => w.rotation.x += wheelSpeed * 0.1);
+
+  // Camera Follow
+  const camDist = 12;
   camera.position.x = carBody.position.x - Math.sin(camAngle) * camDist;
   camera.position.z = carBody.position.z - Math.cos(camAngle) * camDist;
-  camera.position.y = carBody.position.y + 4;
+  camera.position.y = carBody.position.y + 5;
   camera.lookAt(carBody.position.x, carBody.position.y + 1, carBody.position.z);
 
   // HUD
@@ -203,9 +256,9 @@ function animate() {
 }
 
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
 
 animate();
