@@ -3,40 +3,23 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>NEON CITY</title>
+<title>VICE CITY: Sunset</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{width:100%;height:100%;overflow:hidden;background:#05070a;font-family:sans-serif;color:#fff;user-select:none}
+  body{width:100%;height:100%;overflow:hidden;background:#111;font-family:'Segoe UI',sans-serif;color:#fff;user-select:none}
   #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
-  #healthWrap{position:absolute;top:20px;left:20px;width:200px;height:15px;background:rgba(0,0,0,.5);border:2px solid #fff;border-radius:10px;overflow:hidden}
-  #healthBar{height:100%;width:100%;background:#25d366;transition:width .2s}
-  #stars{position:absolute;top:40px;left:20px;font-size:24px;color:#555;text-shadow:0 0 5px #000}
-  .star.on{color:#ffd23f;text-shadow:0 0 10px #ffd23f}
-  #cash{position:absolute;top:20px;right:20px;font-size:30px;font-weight:bold;color:#7dfba0;text-shadow:0 2px 5px #000}
-  #speedo{position:absolute;bottom:20px;left:20px;font-size:40px;font-weight:bold;display:none;text-shadow:0 2px 5px #000}
-  #speedo span{font-size:16px;color:#aaa}
-  #help{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);font-size:14px;color:rgba(255,255,255,.7);text-shadow:0 1px 3px #000;text-align:center}
-  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;cursor:pointer}
-  #overlay h1{font-size:50px;margin-bottom:10px;color:#4fc3ff;text-shadow:0 0 20px #4fc3ff}
-  #overlay p{font-size:20px;margin-bottom:20px}
-  #crosshair{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px;background:red;border-radius:50%;display:none;box-shadow:0 0 5px #000}
+  #speedo{position:absolute;bottom:20px;left:20px;font-size:50px;font-weight:900;color:#fff;text-shadow:0 0 10px #ff00ff, 0 2px 5px #000;display:none}
+  #speedo span{font-size:16px;color:#ff00ff}
+  #overlay{position:fixed;inset:0;background:linear-gradient(to bottom, rgba(20,0,40,0.8), rgba(0,0,0,0.9));display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;cursor:pointer}
+  #overlay h1{font-size:60px;margin-bottom:10px;color:#ff00ff;text-shadow:0 0 20px #ff00ff;letter-spacing:5px;font-style:italic}
+  #overlay p{font-size:20px;margin-bottom:20px;color:#00ffff;text-shadow:0 0 10px #00ffff}
 </style>
 </head>
 <body>
-
 <div id="hud">
-  <div id="healthWrap"><div id="healthBar"></div></div>
-  <div id="stars">★★★★★</div>
-  <div id="cash">$0</div>
-  <div id="speedo">0 <span>KM/H</span></div>
-  <div id="crosshair"></div>
-  <div id="help">WASD Move · Shift Sprint · Space Jump/Handbrake · E Enter/Exit Car · Click to lock mouse</div>
+  <div id="speedo">0 <span>MPH</span></div>
 </div>
-
-<div id="overlay">
-  <h1>NEON CITY</h1>
-  <p>Click anywhere to start playing</p>
-</div>
+<div id="overlay"><h1>VICE CITY</h1><p>Click to drive</p></div>
 
 <script type="importmap">
 {
@@ -51,248 +34,181 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 
-// --- Setup Three.js Scene ---
+// --- Scene & Sunset Setup ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB);
-scene.fog = new THREE.Fog(0x87CEEB, 50, 300);
+scene.fog = new THREE.FogExp2(0xff6699, 0.005); // Pink fog
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
 document.body.appendChild(renderer.domElement);
 
-// --- Setup Cannon-es Physics ---
+// Sunset Sky (Shader)
+const skyGeo = new THREE.SphereGeometry(500, 32, 15);
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: { top: { value: new THREE.Color(0x2b1055) }, bottom: { value: new THREE.Color(0xff7597) } },
+  vertexShader: `varying vec3 vWorldPosition; void main() { vec4 worldPosition = modelMatrix * vec4(position, 1.0); vWorldPosition = worldPosition.xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform vec3 top; uniform vec3 bottom; varying vec3 vWorldPosition; void main() { float h = normalize(vWorldPosition).y; gl_FragColor = vec4(mix(bottom, top, max(pow(max(h, 0.0), 0.6), 0.0)), 1.0); }`,
+  side: THREE.BackSide
+});
+scene.add(new THREE.Mesh(skyGeo, skyMat));
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const sun = new THREE.DirectionalLight(0xffaa88, 1.5);
+sun.position.set(-50, 20, -100); // Low sunset sun
+sun.castShadow = true;
+scene.add(sun);
+
+// --- Physics World ---
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -20, 0) });
-world.allowSleep = true;
+world.broadphase = new CANNON.SAPBroadphase(world);
 
-// --- Lights ---
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-dirLight.position.set(50, 100, 50);
-dirLight.castShadow = true;
-dirLight.shadow.camera.left = -100;
-dirLight.shadow.camera.right = 100;
-dirLight.shadow.camera.top = 100;
-dirLight.shadow.camera.bottom = -100;
-scene.add(dirLight);
+// --- Ground & Roads ---
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.8 }); // Shiny wet road
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), groundMat);
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
+scene.add(ground);
+world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), quaternion: new CANNON.Quaternion().setFromEuler(-Math.PI/2, 0, 0) }));
 
-// --- Create Ground ---
-const groundGeo = new THREE.PlaneGeometry(1000, 1000);
-const groundMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-const groundMesh = new THREE.Mesh(groundGeo, groundMat);
-groundMesh.rotation.x = -Math.PI / 2;
-groundMesh.receiveShadow = true;
-scene.add(groundMesh);
+// --- Procedural City & Palm Trees ---
+const buildingColors = [0x222233, 0x332244, 0x442255];
+const windowMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 }); // Glowing windows
 
-const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
-groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-world.addBody(groundBody);
+for(let x = -150; x <= 150; x += 50) {
+  for(let z = -150; z <= 150; z += 50) {
+    if(Math.abs(x) < 30 && Math.abs(z) < 30) continue; // Keep spawn area clear
 
-// --- Create City (Procedural) ---
-const buildings = [];
-const buildingColors = [0x8899aa, 0x667788, 0x99aabb, 0x556677];
-for(let x = -100; x <= 100; x += 30) {
-  for(let z = -100; z <= 100; z += 30) {
-    if(x === 0 && z === 0) continue; // Leave spawn empty
-    const h = Math.random() * 40 + 20;
-    const w = Math.random() * 10 + 10;
-    const d = Math.random() * 10 + 10;
-    
-    // Mesh
-    const geo = new THREE.BoxGeometry(w, h, d);
-    const mat = new THREE.MeshStandardMaterial({ color: buildingColors[Math.floor(Math.random()*buildingColors.length)] });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, h/2, z);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    // Buildings
+    const h = Math.random() * 60 + 20;
+    const w = Math.random() * 15 + 10;
+    const d = Math.random() * 15 + 10;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: buildingColors[Math.floor(Math.random()*3)], roughness: 0.4 }));
+    mesh.position.set(x, h/2, z); mesh.castShadow = true;
     scene.add(mesh);
-    
-    // Physics
-    const body = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)) });
-    body.position.set(x, h/2, z);
-    world.addBody(body);
+    world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)), position: new CANNON.Vec3(x, h/2, z) }));
+
+    // Fake glowing windows (small boxes on the building)
+    for(let i=0; i<10; i++) {
+      const win = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), windowMat);
+      win.position.set(x + (Math.random()>0.5?w/2:-w/2), Math.random()*h, z + (Math.random()>0.5?d/2:-d/2));
+      scene.add(win);
+    }
+
+    // Palm Trees on corners
+    if(Math.random() > 0.6) {
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0x5c4033 }));
+      trunk.position.y = 4; trunk.rotation.z = (Math.random()-0.5)*0.3;
+      tree.add(trunk);
+      const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228822, side: THREE.DoubleSide });
+      for(let l=0; l<5; l++) {
+        const leaf = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5), leavesMat);
+        leaf.position.y = 8;
+        leaf.rotation.y = (l/5) * Math.PI * 2;
+        leaf.rotation.x = Math.PI/4;
+        leaf.position.x = Math.cos(leaf.rotation.y)*3;
+        leaf.position.z = Math.sin(leaf.rotation.y)*3;
+        tree.add(leaf);
+      }
+      tree.position.set(x + 15, 0, z + 15);
+      scene.add(tree);
+    }
   }
 }
 
-// --- Create Player ---
-const playerGroup = new THREE.Group();
-const pBodyMat = new THREE.MeshStandardMaterial({ color: 0x22aa22 });
-const pHeadMat = new THREE.MeshStandardMaterial({ color: 0xffccaa });
-const pTorso = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.5), pBodyMat);
-pTorso.position.y = 0.75;
-const pHead = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), pHeadMat);
-pHead.position.y = 1.8;
-playerGroup.add(pTorso, pHead);
-playerGroup.castShadow = true;
-scene.add(playerGroup);
-
-const playerBody = new CANNON.Body({
-  mass: 70,
-  shape: new CANNON.Sphere(0.8),
-  position: new CANNON.Vec3(0, 5, 0),
-  linearDamping: 0.9,
-  fixedRotation: true
-});
-world.addBody(playerBody);
-
-// --- Create Car ---
+// --- Player Car (Shiny Sports Car) ---
 const carGroup = new THREE.Group();
-const carBodyMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), new THREE.MeshStandardMaterial({ color: 0xcc1111 }));
-carBodyMesh.castShadow = true;
-carBodyMesh.position.y = 0.5;
-carGroup.add(carBodyMesh);
+const carPaint = new THREE.MeshPhysicalMaterial({ color: 0x00aaff, metalness: 0.8, roughness: 0.1, clearcoat: 1.0 });
+const carMesh = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.8, 4.5), carPaint);
+carMesh.position.y = 0.6; carMesh.castShadow = true;
+const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.6, 2), new THREE.MeshPhysicalMaterial({ color: 0x000000, metalness: 0.9, roughness: 0.0, transparent: true, opacity: 0.8 }));
+cabin.position.set(0, 1.2, -0.2);
+const headlight1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+headlight1.position.set(0.7, 0.6, 2.25);
+const headlight2 = headlight1.clone(); headlight2.position.x = -0.7;
+carGroup.add(carMesh, cabin, headlight1, headlight2);
 scene.add(carGroup);
 
 const carBody = new CANNON.Body({
-  mass: 500,
-  shape: new CANNON.Box(new CANNON.Vec3(1, 0.5, 2)),
-  position: new CANNON.Vec3(8, 1, 0),
-  linearDamping: 0.5,
-  angularDamping: 0.5
+  mass: 150, shape: new CANNON.Box(new CANNON.Vec3(1.1, 0.4, 2.25)),
+  position: new CANNON.Vec3(0, 2, 0), linearDamping: 0.5, angularDamping: 0.8
 });
 world.addBody(carBody);
 
-// --- Controls ---
-const keys = { w: false, a: false, s: false, d: false, shift: false, space: false, e: false };
-let inCar = false;
-
-document.addEventListener('keydown', (e) => {
-  if(e.key === 'w' || e.key === 'W') keys.w = true;
-  if(e.key === 'a' || e.key === 'A') keys.a = true;
-  if(e.key === 's' || e.key === 'S') keys.s = true;
-  if(e.key === 'd' || e.key === 'D') keys.d = true;
-  if(e.key === 'Shift') keys.shift = true;
-  if(e.key === ' ') keys.space = true;
-  if(e.key === 'e' || e.key === 'E') tryEnterCar();
-});
-document.addEventListener('keyup', (e) => {
-  if(e.key === 'w' || e.key === 'W') keys.w = false;
-  if(e.key === 'a' || e.key === 'A') keys.a = false;
-  if(e.key === 's' || e.key === 'S') keys.s = false;
-  if(e.key === 'd' || e.key === 'D') keys.d = false;
-  if(e.key === 'Shift') keys.shift = false;
-  if(e.key === ' ') keys.space = false;
-});
-
-// Mouse Look
-let mouseX = 0;
-let mouseY = 0;
-let cameraAngle = 0;
-const overlay = document.getElementById('overlay');
-
-overlay.addEventListener('click', () => {
-  overlay.style.display = 'none';
-  renderer.domElement.requestPointerLock();
-});
-
-document.addEventListener('mousemove', (e) => {
-  if (document.pointerLockElement === renderer.domElement) {
-    cameraAngle -= e.movementX * 0.002;
-    mouseY = Math.max(-Math.PI/4, Math.min(Math.PI/4, mouseY - e.movementY * 0.002));
-  }
-});
-
-// Enter/Exit Car
-function tryEnterCar() {
-  const dist = playerBody.position.distanceTo(carBody.position);
-  if (dist < 5) {
-    inCar = !inCar;
-    document.getElementById('speedo').style.display = inCar ? 'block' : 'none';
-    playerGroup.visible = !inCar;
-    if (inCar) {
-      playerBody.position.copy(carBody.position); // teleport player into car
-    } else {
-      playerBody.position.set(carBody.position.x + 3, carBody.position.y + 2, carBody.position.z); // hop out
-    }
-  }
+// --- AI Traffic ---
+const aiCars = [];
+for(let i=0; i<15; i++) {
+  const aiGrp = new THREE.Group();
+  const aiMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), new THREE.MeshStandardMaterial({ color: Math.random()*0xffffff }));
+  aiMesh.position.y = 0.5; aiGrp.add(aiMesh);
+  const aiBody = new CANNON.Body({ mass: 200, shape: new CANNON.Box(new CANNON.Vec3(1, 0.5, 2)), position: new CANNON.Vec3((Math.random()-0.5)*300, 1, (Math.random()-0.5)*300) });
+  world.addBody(aiBody);
+  scene.add(aiGrp);
+  aiCars.push({ mesh: aiGrp, body: aiBody, speed: Math.random()*10+10 });
 }
 
-// --- Animation Loop ---
-const clock = new THREE.Clock();
+// --- Controls & Camera ---
+const keys = { w: false, a: false, s: false, d: false, space: false };
+let cameraAngle = Math.PI;
+const overlay = document.getElementById('overlay');
 
+overlay.addEventListener('click', () => { overlay.style.display = 'none'; document.getElementById('speedo').style.display = 'block'; renderer.domElement.requestPointerLock(); });
+document.addEventListener('mousemove', (e) => { if (document.pointerLockElement === renderer.domElement) cameraAngle -= e.movementX * 0.002; });
+addEventListener('keydown', e => { if(e.key==='w')keys.w=true; if(e.key==='a')keys.a=true; if(e.key==='s')keys.s=true; if(e.key==='d')keys.d=true; if(e.key===' ')keys.space=true; });
+addEventListener('keyup', e => { if(e.key==='w')keys.w=false; if(e.key==='a')keys.a=false; if(e.key==='s')keys.s=false; if(e.key==='d')keys.d=false; if(e.key===' ')keys.space=false; });
+
+// --- Game Loop ---
+const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
-  
   const dt = Math.min(clock.getDelta(), 0.1);
   world.step(1/60, dt, 3);
 
-  // Sync meshes to physics bodies
-  playerGroup.position.copy(playerBody.position);
-  playerGroup.quaternion.copy(playerBody.quaternion);
+  // Sync Car
   carGroup.position.copy(carBody.position);
   carGroup.quaternion.copy(carBody.quaternion);
 
-  // Movement Logic
-  if (!inCar) {
-    // Player walking
-    const speed = keys.shift ? 20 : 10;
-    playerBody.velocity.x = 0; // reset forces
-    playerBody.velocity.z = 0;
-    
-    // Move relative to camera angle
-    const forward = new CANNON.Vec3(Math.sin(cameraAngle), 0, Math.cos(cameraAngle));
-    const right = new CANNON.Vec3(Math.cos(cameraAngle), 0, -Math.sin(cameraAngle));
-    
-    if (keys.w) { playerBody.velocity.x += forward.x * speed; playerBody.velocity.z += forward.z * speed; }
-    if (keys.s) { playerBody.velocity.x -= forward.x * speed; playerBody.velocity.z -= forward.z * speed; }
-    if (keys.a) { playerBody.velocity.x -= right.x * speed; playerBody.velocity.z -= right.z * speed; }
-    if (keys.d) { playerBody.velocity.x += right.x * speed; playerBody.velocity.z += right.z * speed; }
+  // Car Physics (Arcade Drift Style)
+  carBody.angularVelocity.set(0,0,0);
+  carBody.quaternion.setFromEuler(0, carBody.quaternion.toEuler().y, 0); // Keep upright
+  
+  const forward = new CANNON.Vec3(0, 0, 1);
+  carBody.quaternion.vmult(forward, forward);
+  
+  if (keys.w) carBody.applyForce(forward.scale(2000), carBody.position);
+  if (keys.s) carBody.applyForce(forward.scale(-1500), carBody.position);
+  if (keys.a) carBody.angularVelocity.y = 2.5;
+  if (keys.d) carBody.angularVelocity.y = -2.5;
+  if (keys.space) carBody.velocity.scale(0.9, carBody.velocity); // Handbrake
 
-    if (keys.space && Math.abs(playerBody.velocity.y) < 0.1) {
-      playerBody.velocity.y = 10; // Jump
-    }
-    
-    // Camera follow player
-    const camDist = 8;
-    camera.position.x = playerBody.position.x - Math.sin(cameraAngle) * camDist;
-    camera.position.z = playerBody.position.z - Math.cos(cameraAngle) * camDist;
-    camera.position.y = playerBody.position.y + 4 + (mouseY * -5);
-    camera.lookAt(playerBody.position.x, playerBody.position.y + 1, playerBody.position.z);
+  // Sync AI Traffic
+  aiCars.forEach(ai => {
+    ai.body.velocity.set(Math.sin(ai.body.position.x * 0.1) * ai.speed, 0, Math.cos(ai.body.position.z * 0.1) * ai.speed);
+    ai.mesh.position.copy(ai.body.position);
+  });
 
-  } else {
-    // Car driving
-    carBody.angularVelocity.set(0,0,0); // reset spin to keep it upright
-    carBody.quaternion.setFromEuler(0, carBody.quaternion.toEuler().y, 0); // lock rotation
-    
-    const engineForce = 5000;
-    const steerSpeed = 2;
-    
-    const forward = new CANNON.Vec3(0, 0, 1);
-    carBody.quaternion.vmult(forward, forward); // get forward direction
-    
-    if (keys.w) {
-      carBody.applyForce(forward.scale(engineForce), carBody.position);
-    }
-    if (keys.s) {
-      carBody.applyForce(forward.scale(-engineForce), carBody.position);
-    }
-    
-    if (keys.a) carBody.angularVelocity.y = steerSpeed;
-    if (keys.d) carBody.angularVelocity.y = -steerSpeed;
-    if (keys.space) carBody.velocity.scale(0.95, carBody.velocity); // handbrake
+  // Camera Follow (Spring Arm)
+  const camDist = 10;
+  const targetCamPos = new THREE.Vector3(
+    carBody.position.x - Math.sin(cameraAngle) * camDist,
+    carBody.position.y + 4,
+    carBody.position.z - Math.cos(cameraAngle) * camDist
+  );
+  camera.position.lerp(targetCamPos, 0.1);
+  camera.lookAt(carBody.position.x, carBody.position.y + 1, carBody.position.z);
 
-    // Update HUD Speedo
-    const speed = Math.floor(carBody.velocity.length() * 3.6);
-    document.getElementById('speedo').innerHTML = speed + ' <span>KM/H</span>';
-
-    // Camera follow car
-    const camDist = 12;
-    camera.position.x = carBody.position.x - Math.sin(cameraAngle) * camDist;
-    camera.position.z = carBody.position.z - Math.cos(cameraAngle) * camDist;
-    camera.position.y = carBody.position.y + 6;
-    camera.lookAt(carBody.position.x, carBody.position.y, carBody.position.z);
-  }
+  // HUD
+  document.getElementById('speedo').innerHTML = Math.floor(carBody.velocity.length() * 2.2) + ' <span>MPH</span>';
 
   renderer.render(scene, camera);
 }
 
-// Resize handler
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
 });
 
 animate();
