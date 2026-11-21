@@ -5,36 +5,49 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>VICE CITY - LEONIDA</title>
 <style>
-  body{margin:0;overflow:hidden;background:#000;font-family:'Segoe UI',Arial,sans-serif;color:#fff;user-select:none}
+  body{margin:0;overflow:hidden;background:#87CEEB;font-family:'Segoe UI',sans-serif;color:#fff;user-select:none}
   
   /* HUD */
   #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
-  #speedo{position:absolute;bottom:30px;right:30px;font-size:70px;font-weight:900;color:#fff;text-shadow:0 0 20px #ff00ff, 0 0 10px #00ffff;display:none;font-style:italic;letter-spacing:-2px}
-  #speedo span{font-size:20px;color:#00ffff;letter-spacing:2px}
-  #minimap{position:absolute;bottom:30px;left:30px;width:180px;height:180px;border-radius:50%;border:4px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.7);box-shadow:0 0 30px rgba(255,0,255,0.3)}
+  #speedo{position:absolute;bottom:30px;right:30px;font-size:60px;font-weight:900;color:#fff;text-shadow:0 0 20px #ff00ff, 0 0 10px #00ffff;display:none;font-style:italic;letter-spacing:-2px}
+  #speedo span{font-size:18px;color:#00ffff;letter-spacing:2px}
+  #minimap{position:absolute;bottom:30px;left:30px;width:160px;height:160px;border-radius:50%;border:4px solid rgba(255,255,255,0.8);background:rgba(0,0,0,0.6);box-shadow:0 0 20px rgba(0,0,0,0.5)}
+  
+  #jobPrompt{position:absolute;top:20%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);padding:15px 30px;border-radius:10px;font-size:20px;font-weight:bold;border:2px solid #ffcc00;color:#ffcc00;display:none;text-align:center}
 
-  /* START SCREEN */
+  /* START SCREEN & SERVER SELECTOR */
   #overlay{
     position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;
     background:linear-gradient(180deg, #1a0b2e 0%, #ff00ff 100%);
-    transition: opacity 0.5s; cursor: pointer;
+    transition: opacity 0.5s;
   }
-  h1{font-size:90px;margin:0;color:#fff;font-style:italic;letter-spacing:8px;text-shadow:0 0 30px #00ffff, 0 0 60px #00ffff}
-  p{font-size:24px;color:#00ffff;text-shadow:0 0 10px #00ffff;letter-spacing:4px;margin-top:10px;font-weight:bold}
-  .btn{margin-top:40px;padding:15px 60px;font-size:24px;font-weight:900;color:#000;background:#00ffff;border-radius:30px;box-shadow:0 0 30px #00ffff}
+  h1{font-size:80px;margin:0;color:#fff;font-style:italic;letter-spacing:8px;text-shadow:0 0 30px #00ffff, 0 0 60px #00ffff}
+  
+  .server-panel{margin-top:30px;background:rgba(0,0,0,0.6);padding:30px;border-radius:15px;border:1px solid #00ffff;text-align:center}
+  .server-btn{display:block;width:300px;margin:10px auto;padding:15px;background:#00ffff;color:#000;font-weight:bold;font-size:18px;border:none;border-radius:8px;cursor:pointer;transition:0.2s}
+  .server-btn:hover{background:#fff;box-shadow:0 0 15px #00ffff}
+  
+  .code-input{margin-top:15px;padding:10px;font-size:18px;text-align:center;width:150px;border-radius:5px;border:none;letter-spacing:5px}
+  .private-btn{margin-top:10px;padding:10px 30px;background:#ff00ff;color:#fff;font-weight:bold;border:none;border-radius:5px;cursor:pointer}
 </style>
 </head>
 <body>
 
 <div id="hud">
   <div id="speedo">0 <span>MPH</span></div>
-  <canvas id="minimap" width="180" height="180"></canvas>
+  <canvas id="minimap" width="160" height="160"></canvas>
+  <div id="jobPrompt">Press E to become a Police Officer 👮‍♂️</div>
 </div>
 
 <div id="overlay">
   <h1>VICE CITY</h1>
-  <p>LEONIDA PROTOTYPE</p>
-  <div class="btn">CLICK TO PLAY</div>
+  <div class="server-panel">
+    <button class="server-btn" id="globalBtn">🌍 Join Global Server</button>
+    <br>
+    <input type="text" id="codeInput" class="code-input" placeholder="12345" maxlength="5">
+    <br>
+    <button class="private-btn" id="privateBtn">🔒 Join Private Server</button>
+  </div>
 </div>
 
 <script type="importmap">
@@ -48,134 +61,194 @@
 <script type="module">
 import * as THREE from 'three';
 
-// 1. ENGINE SETUP
+// --- 1. ENGINE SETUP ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0514); // Deep night sky
-scene.fog = new THREE.FogExp2(0x0a0514, 0.015); // Atmospheric night fog
+scene.background = new THREE.Color(0x87CEEB); // Day Sky
+scene.fog = new THREE.Fog(0x87CEEB, 100, 400);
 
 const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; // Realistic shadows
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-// 2. LIGHTING (Neon Night Vibe)
-scene.add(new THREE.AmbientLight(0xffffff, 0.4)); // Dim ambient
-const moonlight = new THREE.DirectionalLight(0x0088ff, 1.5); // Blueish moonlight
-moonlight.position.set(-50, 100, -50);
-scene.add(moonlight);
+// --- 2. DAY/NIGHT CYCLE & LIGHTING ---
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
+hemiLight.position.set(0, 200, 0);
+scene.add(hemiLight);
 
-// 3. PROCEDURAL ROAD (Wet Asphalt)
+const sun = new THREE.DirectionalLight(0xffeedd, 2.0);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 2048;
+sun.shadow.mapSize.height = 2048;
+sun.shadow.camera.left = -150;
+sun.shadow.camera.right = 150;
+sun.shadow.camera.top = 150;
+sun.shadow.camera.bottom = -150;
+scene.add(sun);
+
+// --- 3. PROCEDURAL TEXTURES ---
 function makeRoadTexture() {
   const c = document.createElement('canvas'); c.width = 512; c.height = 512;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#0a0a0f'; ctx.fillRect(0, 0, 512, 512); // Very dark
+  ctx.fillStyle = '#333333'; ctx.fillRect(0, 0, 512, 512); // Grey asphalt
   // Yellow lines
-  ctx.fillStyle = '#ffaa00'; ctx.fillRect(248, 0, 6, 512); ctx.fillRect(258, 0, 6, 512);
+  ctx.fillStyle = '#ffcc00'; ctx.fillRect(248, 0, 6, 512); ctx.fillRect(258, 0, 6, 512);
   // White dashes
   ctx.fillStyle = '#ffffff';
   for(let i=0; i<512; i+=64) { ctx.fillRect(120, i, 4, 32); ctx.fillRect(388, i, 4, 32); }
   const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1, 20);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1, 10);
   return tex;
 }
 
-const roadMat = new THREE.MeshStandardMaterial({ 
-  map: makeRoadTexture(), 
-  roughness: 0.05, // Super shiny wet road
-  metalness: 0.9,  // Highly reflective
-  color: 0xffffff
-});
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), roadMat);
+function makeBuildingTexture(color) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = color; ctx.fillRect(0, 0, 256, 256);
+  // Windows
+  ctx.fillStyle = '#aaddff';
+  for(let y=10; y<250; y+=40) {
+    for(let x=10; x<250; x+=40) {
+      ctx.fillRect(x, y, 20, 25);
+    }
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+const roadTex = makeRoadTexture();
+const buildingTex = makeBuildingTexture('#888888');
+const hospitalTex = makeBuildingTexture('#ffcccc');
+const policeTex = makeBuildingTexture('#ccccff');
+const fireTex = makeBuildingTexture('#ff8888');
+const houseTex = makeBuildingTexture('#eeddaa');
+
+// --- 4. WORLD GENERATION ---
+const collidables = []; // {x, z, w, d} for AABB collisions
+const jobs = []; // {x, z, type}
+
+// Roads and Sidewalks
+const groundMat = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.8 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), groundMat);
 ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
 scene.add(ground);
 
-// 4. DENSE NEON CITY
-const collidables = [];
-const neonColors = [0xff00ff, 0x00ffff, 0xff0055, 0xffff00];
-
-for(let x = -200; x <= 200; x += 40) {
-  for(let z = -200; z <= 200; z += 40) {
-    if(Math.abs(x) < 30 && Math.abs(z) < 30) continue; // Spawn area
-
-    // Skyscraper
-    const h = Math.random() * 80 + 20;
+// Sidewalks
+const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+for(let x = -200; x <= 200; x += 60) {
+  for(let z = -200; z <= 200; z += 60) {
+    if(Math.abs(x) < 30 && Math.abs(z) < 30) continue; // Spawn
+    
+    // Create buildings in the center of the block
+    const h = Math.random() * 30 + 20;
     const w = Math.random() * 15 + 15;
     const d = Math.random() * 15 + 15;
     
-    const bMat = new THREE.MeshStandardMaterial({ color: 0x111116, roughness: 0.8 });
+    // Determine building type
+    let tex = buildingTex;
+    let isJob = false;
+    let jobType = '';
+    if (Math.random() > 0.85) { tex = policeTex; isJob = true; jobType = 'police'; }
+    else if (Math.random() > 0.85) { tex = hospitalTex; isJob = true; jobType = 'hospital'; }
+    else if (Math.random() > 0.85) { tex = fireTex; isJob = true; jobType = 'fire'; }
+    else if (Math.random() > 0.6) { tex = houseTex; }
+
+    const bMat = new THREE.MeshStandardMaterial({ map: tex });
     const bGeo = new THREE.BoxGeometry(w, h, d);
     const building = new THREE.Mesh(bGeo, bMat);
     building.position.set(x, h/2, z);
+    building.castShadow = true;
+    building.receiveShadow = true;
     scene.add(building);
-    collidables.push({ x: x, z: z, r: Math.max(w, d)/2 + 2 });
-
-    // Glowing Neon Strips on Buildings
-    for(let ny = 5; ny < h; ny += 15) {
-      if(Math.random() > 0.3) continue;
-      const neonMat = new THREE.MeshBasicMaterial({ color: neonColors[Math.floor(Math.random()*4)] });
-      const neon = new THREE.Mesh(new THREE.BoxGeometry(w+1, 1, d+1), neonMat);
-      neon.position.set(x, ny, z);
-      scene.add(neon);
+    
+    // Save for collision (AABB)
+    collidables.push({ x: x, z: z, w: w/2, d: d/2 });
+    
+    if(isJob) {
+      jobs.push({ x: x, z: z, type: jobType });
     }
 
-    // Palm Trees (Procedural)
+    // Sidewalk around building
+    const sw = new THREE.Mesh(new THREE.BoxGeometry(w+10, 0.2, d+10), sidewalkMat);
+    sw.position.set(x, 0.1, z);
+    sw.receiveShadow = true;
+    scene.add(sw);
+    
+    // Palm Trees
     if(Math.random() > 0.7) {
       const tree = new THREE.Group();
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.6, 12), new THREE.MeshBasicMaterial({ color: 0x221100 }));
-      trunk.position.y = 6; tree.add(trunk);
-      const leafMat = new THREE.MeshBasicMaterial({ color: 0x004400, side: THREE.DoubleSide });
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.6, 12), new THREE.MeshStandardMaterial({ color: 0x5c4033 }));
+      trunk.position.y = 6; trunk.castShadow = true; tree.add(trunk);
+      const leafMat = new THREE.MeshStandardMaterial({ color: 0x228822, side: THREE.DoubleSide });
       for(let i=0; i<6; i++) {
-        const leaf = new THREE.Mesh(new THREE.PlaneGeometry(10, 2), leafMat);
+        const leaf = new THREE.Mesh(new THREE.PlaneGeometry(10, 3), leafMat);
         leaf.position.y = 12; leaf.rotation.y = (i/6)*Math.PI*2; leaf.rotation.x = Math.PI/4;
         leaf.position.x = Math.cos(leaf.rotation.y)*4; leaf.position.z = Math.sin(leaf.rotation.y)*4;
+        leaf.castShadow = true;
         tree.add(leaf);
       }
-      tree.position.set(x + w/2 + 5, 0, z + d/2 + 5);
+      tree.position.set(x + w/2 + 6, 0, z + d/2 + 6);
       scene.add(tree);
     }
   }
 }
 
-// 5. THE CAR (Sleek Sports Car)
+// --- 5. PLAYER CAR ---
 const car = new THREE.Group();
-// Main body (White)
-const body = new THREE.Mesh(
-  new THREE.BoxGeometry(2.2, 0.6, 4.6), 
-  new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.8, roughness: 0.1 })
-);
-body.position.y = 0.6;
-// Cabin (Black Glass)
-const cabin = new THREE.Mesh(
-  new THREE.BoxGeometry(1.8, 0.5, 2.2), 
-  new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 1.0, roughness: 0.0 })
-);
-cabin.position.set(0, 1.15, -0.2);
-// Red Stripe
-const stripe = new THREE.Mesh(
-  new THREE.BoxGeometry(0.4, 0.61, 4.6), 
-  new THREE.MeshBasicMaterial({ color: 0xff0000 })
-);
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.8, roughness: 0.2 }); // Shiny
+const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.6, 4.6), bodyMat);
+body.position.y = 0.6; body.castShadow = true;
+const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.5, 2.2), new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 1.0, roughness: 0.0 }));
+cabin.position.set(0, 1.15, -0.2); cabin.castShadow = true;
+const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.61, 4.6), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
 stripe.position.y = 0.6;
-// Headlights (Glowing White)
 const hl = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff }));
 hl.position.set(0, 0.6, 2.31);
-// Taillights (Glowing Red)
 const tl = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
 tl.position.set(0, 0.6, -2.31);
+
+// Wheels
+const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
+wheelGeo.rotateZ(Math.PI/2);
+const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+const wheels = [];
+[[1.1, 0.4, 1.4], [-1.1, 0.4, 1.4], [1.1, 0.4, -1.4], [-1.1, 0.4, -1.4]].forEach(pos => {
+  const w = new THREE.Mesh(wheelGeo, wheelMat);
+  w.position.set(pos[0], pos[1], pos[2]);
+  w.castShadow = true;
+  car.add(w);
+  wheels.push(w);
+});
 
 car.add(body, cabin, stripe, hl, tl);
 scene.add(car);
 
-// 6. ARCADE PHYSICS
+// --- 6. ARCADE PHYSICS & CONTROLS ---
 let carPos = new THREE.Vector3(0, 0, 0);
 let carAngle = 0, carSpeed = 0, camAngle = 0;
+let currentJob = null;
 const keys = { w: false, a: false, s: false, d: false, space: false };
 
+// Server UI Logic
 const overlay = document.getElementById('overlay');
-overlay.addEventListener('click', () => {
+const codeInput = document.getElementById('codeInput');
+
+function startGame() {
   overlay.style.display = 'none';
   document.getElementById('speedo').style.display = 'block';
   renderer.domElement.requestPointerLock();
+}
+
+document.getElementById('globalBtn').addEventListener('click', startGame);
+document.getElementById('privateBtn').addEventListener('click', () => {
+  if(codeInput.value.length === 5) {
+    alert(`Connecting to Private Server: ${codeInput.value}`);
+    startGame();
+  } else {
+    alert("Please enter a 5-digit code!");
+  }
 });
 
 document.addEventListener('mousemove', (e) => {
@@ -189,6 +262,11 @@ window.addEventListener('keydown', (e) => {
   if(k === 'w') keys.w = true; if(k === 's') keys.s = true;
   if(k === 'a') keys.a = true; if(k === 'd') keys.d = true;
   if(k === ' ') keys.space = true;
+  
+  if(k === 'e' && currentJob) {
+    document.getElementById('jobPrompt').innerText = `You are now a ${currentJob.toUpperCase()}! 🚨`;
+    setTimeout(() => document.getElementById('jobPrompt').style.display = 'none', 3000);
+  }
 });
 window.addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
@@ -197,32 +275,62 @@ window.addEventListener('keyup', (e) => {
   if(k === ' ') keys.space = false;
 });
 
-// 7. MINIMAP
+// --- 7. MINIMAP ---
 const mapCtx = document.getElementById('minimap').getContext('2d');
 function drawMinimap() {
-  mapCtx.clearRect(0, 0, 180, 180);
+  mapCtx.clearRect(0, 0, 160, 160);
+  mapCtx.fillStyle = '#222'; mapCtx.fillRect(0, 0, 160, 160); // Dark background
+  
   mapCtx.save();
-  mapCtx.translate(90, 90);
+  mapCtx.translate(80, 80);
   mapCtx.rotate(-camAngle);
   
   // Draw Buildings
-  mapCtx.fillStyle = 'rgba(255,0,255,0.3)';
   collidables.forEach(b => {
-    const dx = (b.x - carPos.x) * 0.4; const dz = (b.z - carPos.z) * 0.4;
-    if(Math.hypot(dx, dz) < 90) mapCtx.fillRect(dx - 4, dz - 4, 8, 8);
+    const dx = (b.x - carPos.x) * 0.5; const dz = (b.z - carPos.z) * 0.5;
+    if(Math.hypot(dx, dz) < 80) {
+      mapCtx.fillStyle = '#555';
+      mapCtx.fillRect(dx - b.w, dz - b.d, b.w*2, b.d*2);
+    }
   });
   mapCtx.restore();
   
   // Player Arrow
   mapCtx.fillStyle = '#00ffff';
-  mapCtx.beginPath(); mapCtx.moveTo(90, 80); mapCtx.lineTo(80, 100); mapCtx.lineTo(100, 100); mapCtx.fill();
+  mapCtx.beginPath(); mapCtx.moveTo(80, 70); mapCtx.lineTo(70, 90); mapCtx.lineTo(90, 90); mapCtx.fill();
 }
 
-// 8. GAME LOOP
+// --- 8. GAME LOOP (Day Cycle + Physics) ---
+const clock = new THREE.Clock();
+
 function animate() {
   requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const time = clock.getElapsedTime();
+
   try {
-    // Physics
+    // Day/Night Cycle
+    const sunAngle = time * 0.1;
+    sun.position.set(Math.sin(sunAngle) * 100, Math.cos(sunAngle) * 100, 50);
+    
+    // Change sky color based on sun height
+    const sunHeight = sun.position.y;
+    if(sunHeight > 0) {
+      // Day
+      const dayIntensity = Math.min(1, sunHeight / 50);
+      scene.background.setRGB(0.53 * dayIntensity, 0.81 * dayIntensity, 0.92 * dayIntensity);
+      scene.fog.color.copy(scene.background);
+      sun.intensity = dayIntensity * 2;
+      hemiLight.intensity = dayIntensity;
+    } else {
+      // Night
+      scene.background.setHex(0x0a0514);
+      scene.fog.color.setHex(0x0a0514);
+      sun.intensity = 0;
+      hemiLight.intensity = 0.2;
+    }
+
+    // Car Physics
     if (keys.w) carSpeed += 0.4;
     else if (keys.s) carSpeed -= 0.2;
     else carSpeed *= 0.95;
@@ -238,16 +346,24 @@ function animate() {
     let nextX = carPos.x + Math.sin(carAngle) * carSpeed;
     let nextZ = carPos.z + Math.cos(carAngle) * carSpeed;
 
-    // Collision
+    // AABB Collision Detection
     let hit = false;
-    collidables.forEach(b => { if(Math.hypot(nextX - b.x, nextZ - b.z) < b.r) hit = true; });
+    for(let b of collidables) {
+      if (nextX > b.x - b.w - 1 && nextX < b.x + b.w + 1 && 
+          nextZ > b.z - b.d - 1 && nextZ < b.z + b.d + 1) {
+        hit = true; break;
+      }
+    }
 
     if (!hit) { carPos.x = nextX; carPos.z = nextZ; } 
     else { carSpeed = -carSpeed * 0.5; }
 
-    // Update Car
+    // Update Car Mesh
     car.position.copy(carPos);
     car.rotation.y = carAngle;
+    
+    // Spin Wheels
+    wheels.forEach(w => w.rotation.x += carSpeed * 0.1);
 
     // Camera
     const camDist = 13;
@@ -256,13 +372,25 @@ function animate() {
     camera.position.y = 6;
     camera.lookAt(carPos.x, 1, carPos.z);
 
-    // HUD
+    // Job Check
+    currentJob = null;
+    jobs.forEach(j => {
+      if (Math.hypot(carPos.x - j.x, carPos.z - j.z) < 20) {
+        currentJob = j.type;
+        const prompt = document.getElementById('jobPrompt');
+        prompt.innerText = `Press E to become a ${currentJob} 👮‍♂️🚒`;
+        prompt.style.display = 'block';
+      }
+    });
+    if (!currentJob) document.getElementById('jobPrompt').style.display = 'none';
+
+    // HUD Updates
     document.getElementById('speedo').innerHTML = Math.floor(Math.abs(carSpeed) * 25) + ' <span>MPH</span>';
     drawMinimap();
 
     renderer.render(scene, camera);
   } catch (e) {
-    console.error(e); // Prevents black screen freeze
+    console.error(e);
   }
 }
 
