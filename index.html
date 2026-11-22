@@ -18,6 +18,9 @@
   #speedo{position:absolute;bottom:30px;right:30px;font-size:50px;font-weight:900;font-style:italic;text-shadow:0 0 10px #00ffff}
   #speedo span{font-size:16px;color:#00ffff}
   
+  /* Click to Play Overlay */
+  #clickOverlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;font-size:40px;font-weight:900;color:#fff;text-shadow:0 0 20px #00ffff;cursor:pointer;backdrop-filter:blur(3px)}
+  
   /* UI Screens */
   .screen{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,10,20,0.85);backdrop-filter:blur(5px);transition:opacity 0.3s}
   .hidden{display:none !important}
@@ -48,9 +51,15 @@
     padding: 20px;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
     box-shadow: 0 0 20px rgba(0,255,255,0.2);
+    max-height: 60vh; /* Fixes scrolling */
+    overflow-y: auto;
   }
+  
+  /* Custom Scrollbar */
+  .panel::-webkit-scrollbar { width: 8px; }
+  .panel::-webkit-scrollbar-track { background: rgba(0,0,0,0.5); border-radius: 5px; }
+  .panel::-webkit-scrollbar-thumb { background: #00ffff; border-radius: 5px; }
   
   /* Car Shop */
   .shop-grid{display:grid;grid-template-columns:repeat(2, 1fr);gap:15px;}
@@ -85,6 +94,8 @@
 </style>
 </head>
 <body>
+
+<div id="clickOverlay">CLICK TO PLAY</div>
 
 <!-- HUD -->
 <div id="hud">
@@ -128,19 +139,17 @@
   <button class="btn" style="background:#555; color:#fff; margin-top:20px" onclick="showScreen('homeScreen')">BACK</button>
 </div>
 
-<!-- NEW LOBBY UI -->
+<!-- LOBBY -->
 <div id="lobbyScreen" class="screen hidden">
   <div class="header">
     <h1>LOBBY</h1>
   </div>
   
-  <!-- Left Side: Car Shop -->
   <div class="panel">
-    <h2>CAR SHOP (Click to Preview)</h2>
+    <h2>CAR SHOP (Scroll for more)</h2>
     <div class="shop-grid" id="carShop"></div>
   </div>
 
-  <!-- Right Side: Map Selection -->
   <div class="panel">
     <h2>SELECT MAP</h2>
     <div class="vote-grid">
@@ -150,7 +159,6 @@
     </div>
   </div>
 
-  <!-- Bottom: Coins & Start -->
   <div class="bottom-bar">
     <div id="lobbyCoins">🪙 0 Drift Coins</div>
     <button id="startBtn" onclick="startMatch()">START MATCH NOW</button>
@@ -177,15 +185,16 @@ let selectedCar = parseInt(localStorage.getItem('selectedCar')) || 0;
 let gameState = 'HOME'; 
 let selectedMap = 0;
 
+// The 8 Cars based on your images
 const carsDB = [
-  { id: 0, name: 'Street Cruiser', price: 0, color: 0x3498db, speed: 400, handling: 2.5 },
-  { id: 1, name: 'Vice Super', price: 100, color: 0xff0055, speed: 500, handling: 2.8 },
-  { id: 2, name: 'Cyber Drift', price: 300, color: 0x00ffff, speed: 600, handling: 3.2 },
-  { id: 3, name: 'Gold Phantom', price: 1000, color: 0xffd700, speed: 750, handling: 3.5 },
-  { id: 4, name: 'Midnight Racer', price: 500, color: 0x222222, speed: 650, handling: 3.0 },
-  { id: 5, name: 'Toxic Sludge', price: 800, color: 0x88ff00, speed: 700, handling: 3.1 },
-  { id: 6, name: 'Neon Breeze', price: 1500, color: 0xff00ff, speed: 800, handling: 3.8 },
-  { id: 7, name: 'Lava King', price: 2500, color: 0xff4400, speed: 900, handling: 4.0 }
+  { id: 0, name: 'Street Cruiser', price: 0, color: 0xffffff, speed: 400, type: 'camaro' },
+  { id: 1, name: 'Vice Super', price: 100, color: 0xff4400, speed: 500, type: 'lambo' },
+  { id: 2, name: 'Cyber Drift', price: 300, color: 0xeeeeee, speed: 600, type: 'ae86' },
+  { id: 3, name: 'Gold Phantom', price: 1000, color: 0x0055ff, speed: 750, type: 'bugatti' },
+  { id: 4, name: 'Red Bull Racer', price: 1500, color: 0x001144, speed: 800, type: 'redbull' },
+  { id: 5, name: 'Toxic Mustang', price: 800, color: 0x222222, speed: 700, type: 'mustang' },
+  { id: 6, name: 'Pink Drift', price: 2000, color: 0xff00aa, speed: 850, type: '350z' },
+  { id: 7, name: 'Baja Truck', price: 2500, color: 0x666666, speed: 650, type: 'pickup' }
 ];
 
 // --- 2. THREE.JS & CANNON SETUP ---
@@ -212,18 +221,30 @@ scene.add(sun);
 
 // --- 3. WORLD GENERATION ---
 const arenaRadius = 150;
-const mapColors = [0x333333, 0xff7597, 0x00ffff];
+function makeGridTexture(colorHex) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#111'; ctx.fillRect(0,0,512,512);
+  ctx.strokeStyle = '#' + colorHex.toString(16).padStart(6, '0');
+  ctx.lineWidth = 4;
+  for(let i=0; i<=512; i+=64) {
+    ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,512); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(512,i); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(10, 10);
+  return tex;
+}
 
-// Arena Ground
-const arenaMesh = new THREE.Mesh(new THREE.CircleGeometry(arenaRadius, 64), new THREE.MeshStandardMaterial({ color: mapColors[0] }));
+const arenaMat = new THREE.MeshStandardMaterial({ map: makeGridTexture(0x555555), roughness: 0.4 });
+const arenaMesh = new THREE.Mesh(new THREE.CircleGeometry(arenaRadius, 64), arenaMat);
 arenaMesh.rotation.x = -Math.PI/2; arenaMesh.receiveShadow = true;
 scene.add(arenaMesh);
 
-// Cylinder Walls
-const wallMesh = new THREE.Mesh(new THREE.CylinderGeometry(arenaRadius, arenaRadius, 30, 64, 1, true), new THREE.MeshStandardMaterial({ color: 0x222222, side: THREE.BackSide }));
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x222222, side: THREE.BackSide, emissive: 0x555555, emissiveIntensity: 0.2 });
+const wallMesh = new THREE.Mesh(new THREE.CylinderGeometry(arenaRadius, arenaRadius, 30, 64, 1, true), wallMat);
 wallMesh.position.y = 15; scene.add(wallMesh);
 
-// Physics Ground & Walls
 world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), quaternion: new CANNON.Quaternion().setFromEuler(-Math.PI/2, 0, 0) }));
 const wallBody = new CANNON.Body({ mass: 0 });
 for(let i=0; i<16; i++) {
@@ -236,48 +257,101 @@ for(let i=0; i<16; i++) {
 }
 world.addBody(wallBody);
 
-// Pedestal for preview
-const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(15, 15, 2, 32), new THREE.MeshStandardMaterial({ color: 0x222233, emissive: 0x111133 }));
-pedestal.position.set(0, 1, 0);
+const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(12, 12, 1, 32), new THREE.MeshStandardMaterial({ color: 0x222233, emissive: 0x111133 }));
+pedestal.position.set(0, 0.5, 0);
 scene.add(pedestal);
 
-// --- 4. CAR FACTORY ---
-function createCarMesh(colorHex) {
+// --- 4. CAR FACTORY (Custom 3D Models based on Images) ---
+function createCarMesh(type, colorHex) {
   const g = new THREE.Group();
-  const paint = new THREE.MeshStandardMaterial({ color: colorHex, metalness: 0.8, roughness: 0.2 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 1, roughness: 0 });
+  const paint = new THREE.MeshStandardMaterial({ color: colorHex, metalness: 0.6, roughness: 0.2 });
+  const black = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.5, roughness: 0.5 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x050510, metalness: 1, roughness: 0 });
+  const greenGlow = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
   
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 4), paint);
-  chassis.position.y = 0.5; chassis.castShadow = true; g.add(chassis);
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.2, 1.2), paint);
-  hood.position.set(0, 0.7, 1.3); hood.castShadow = true; g.add(hood);
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 1.8), glass);
-  cabin.position.set(0, 1.0, -0.2); g.add(cabin);
-  const spoiler = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.3), paint);
-  spoiler.position.set(0, 1.0, -1.9); g.add(spoiler);
-  const hl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-  hl.position.set(0, 0.6, 2.01); g.add(hl);
-  const tl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-  tl.position.set(0, 0.6, -2.01); g.add(tl);
-  
-  const wGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 12); wGeo.rotateZ(Math.PI/2);
-  const wMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-  const wheels = [];
-  [[1,0.4,1.3], [-1,0.4,1.3], [1,0.4,-1.3], [-1,0.4,-1.3]].forEach(p => {
-    const w = new THREE.Mesh(wGeo, wMat);
-    w.position.set(p[0], p[1], p[2]); w.castShadow = true;
-    g.add(w); wheels.push(w);
-  });
+  let wheels = [];
+
+  const addWheels = (w, h, d, zOff, xOff, yOff, isGreen=false) => {
+    const wGeo = new THREE.CylinderGeometry(w, w, h, 16); wGeo.rotateZ(Math.PI/2);
+    const mat = isGreen ? greenGlow : black;
+    [[xOff, yOff, zOff], [-xOff, yOff, zOff], [xOff, yOff, -zOff], [-xOff, yOff, -zOff]].forEach(p => {
+      const wheel = new THREE.Mesh(wGeo, mat);
+      wheel.position.set(p[0], p[1], p[2]); wheel.castShadow = true;
+      g.add(wheel); wheels.push(wheel);
+    });
+  };
+
+  if (type === 'lambo') {
+    // Orange Lamborghini (Sharp, aggressive)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.4, 4.2), paint); body.position.y = 0.5; g.add(body);
+    const wedge = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.3, 2.5), paint); wedge.position.set(0, 0.7, 0.5); wedge.rotation.x = -0.1; g.add(wedge);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.35, 1.5), glass); cabin.position.set(0, 0.95, -0.5); g.add(cabin);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 0.4), black); spoiler.position.set(0, 1.0, -2.0); g.add(spoiler);
+    addWheels(0.35, 0.3, 0, 1.3, 1.0, 0.35);
+  } 
+  else if (type === 'ae86') {
+    // White/Black AE86 (Boxy, pop-up lights)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.5, 4.0), paint); body.position.y = 0.55; g.add(body);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 1.2), black); hood.position.set(0, 0.8, 1.2); g.add(hood);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 1.8), glass); cabin.position.set(0, 1.0, -0.2); g.add(cabin);
+    addWheels(0.35, 0.3, 0, 1.2, 0.9, 0.35);
+  }
+  else if (type === 'bugatti') {
+    // Blue Bugatti (Smooth, long, curved)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 4.5), paint); body.position.y = 0.45; g.add(body);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.3, 1.5), paint); nose.position.set(0, 0.55, 1.8); g.add(nose);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.4, 1.8), glass); cabin.position.set(0, 0.85, -0.2); g.add(cabin);
+    const engine = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 1.2), black); engine.position.set(0, 0.8, -1.5); g.add(engine);
+    addWheels(0.35, 0.3, 0, 1.4, 0.95, 0.35);
+  }
+  else if (type === 'redbull') {
+    // Red Bull Racer (Dark blue with yellow accents)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.5, 4.2), paint); body.position.y = 0.5; g.add(body);
+    const accent = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.2, 4.2), new THREE.MeshStandardMaterial({color: 0xffcc00})); accent.position.y = 0.3; g.add(accent);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.4, 2.0), glass); cabin.position.set(0, 0.9, -0.2); g.add(cabin);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.1, 0.5), black); spoiler.position.set(0, 1.0, -2.1); g.add(spoiler);
+    addWheels(0.35, 0.3, 0, 1.4, 1.0, 0.35);
+  }
+  else if (type === 'mustang') {
+    // Toxic Mustang (Black with bright green rims)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.5, 4.5), paint); body.position.y = 0.55; g.add(body);
+    const grill = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.3, 0.2), black); grill.position.set(0, 0.5, 2.25); g.add(grill);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.4, 1.8), glass); cabin.position.set(0, 1.0, -0.3); g.add(cabin);
+    addWheels(0.38, 0.35, 0, 1.4, 1.0, 0.38, true);
+  }
+  else if (type === '350z') {
+    // Pink Drift Car (Big spoiler)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.45, 4.1), paint); body.position.y = 0.5; g.add(body);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.4, 1.6), glass); cabin.position.set(0, 0.9, -0.4); g.add(cabin);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 0.6), black); spoiler.position.set(0, 1.2, -2.0); g.add(spoiler);
+    const stand1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), black); stand1.position.set(0.7, 1.0, -2.0); g.add(stand1);
+    const stand2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), black); stand2.position.set(-0.7, 1.0, -2.0); g.add(stand2);
+    addWheels(0.35, 0.3, 0, 1.3, 0.9, 0.35);
+  }
+  else if (type === 'pickup') {
+    // Grey Pickup Truck (Tall, bed in back)
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 2.2), paint); cab.position.set(0, 0.9, 0.5); g.add(cab);
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.6, 2.2), paint); bed.position.set(0, 0.7, -1.5); g.add(bed);
+    const glassC = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 1.0), glass); glassC.position.set(0, 1.3, 0.5); g.add(glassC);
+    addWheels(0.45, 0.4, 0, 1.5, 1.0, 0.45);
+  }
+  else {
+    // Camaro (White with black hood)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 4.4), paint); body.position.y = 0.5; g.add(body);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.1, 1.5), black); hood.position.set(0, 0.75, 1.2); g.add(hood);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.4, 1.8), glass); cabin.position.set(0, 0.9, -0.4); g.add(cabin);
+    addWheels(0.35, 0.3, 0, 1.4, 0.95, 0.35);
+  }
+
   g.userData.wheels = wheels;
   return g;
 }
 
-// Preview Car
 let previewCarGroup = null;
 function updatePreviewCar(id) {
   if (previewCarGroup) scene.remove(previewCarGroup);
-  previewCarGroup = createCarMesh(carsDB[id].color);
-  previewCarGroup.position.set(0, 3, 0);
+  previewCarGroup = createCarMesh(carsDB[id].type, carsDB[id].color);
+  previewCarGroup.position.set(0, 1.5, 0);
   scene.add(previewCarGroup);
 }
 
@@ -286,13 +360,13 @@ const players = [];
 let playerVehicle = null;
 let cameraMode = 0; 
 
-function spawnVehicle(x, z, colorHex, isBot = false) {
-  const mesh = createCarMesh(colorHex);
+function spawnVehicle(x, z, carData, isBot = false) {
+  const mesh = createCarMesh(carData.type, carData.color);
   scene.add(mesh);
   
   const body = new CANNON.Body({ mass: 150 });
-  body.addShape(new CANNON.Box(new CANNON.Vec3(1, 0.3, 2)));
-  body.position.set(x, 2, z);
+  body.addShape(new CANNON.Box(new CANNON.Vec3(1.0, 0.3, 2.0))); // Slightly larger physics box for stability
+  body.position.set(x, 3, z);
   world.addBody(body);
   
   const vehicle = new CANNON.RaycastVehicle({
@@ -300,11 +374,11 @@ function spawnVehicle(x, z, colorHex, isBot = false) {
   });
   
   const wheelOpts = {
-    radius: 0.4, directionLocal: new CANNON.Vec3(0, -1, 0),
-    suspensionStiffness: 30, suspensionRestLength: 0.3, frictionSlip: 2.5,
+    radius: 0.35, directionLocal: new CANNON.Vec3(0, -1, 0),
+    suspensionStiffness: 40, suspensionRestLength: 0.3, frictionSlip: 3,
     dampingRelaxation: 2.3, dampingCompression: 4.4, maxSuspensionForce: 100000,
     rollInfluence: 0.01, axleLocal: new CANNON.Vec3(-1, 0, 0),
-    chassisConnectionPointLocal: new CANNON.Vec3(1, 1, 0), maxSuspensionTravel: 0.3
+    chassisConnectionPointLocal: new CANNON.Vec3(1, 0.3, 1.3), maxSuspensionTravel: 0.3
   };
   wheelOpts.chassisConnectionPointLocal.set(1, 0.3, 1.3); vehicle.addWheel(wheelOpts);
   wheelOpts.chassisConnectionPointLocal.set(-1, 0.3, 1.3); vehicle.addWheel(wheelOpts);
@@ -312,7 +386,7 @@ function spawnVehicle(x, z, colorHex, isBot = false) {
   wheelOpts.chassisConnectionPointLocal.set(-1, 0.3, -1.3); vehicle.addWheel(wheelOpts);
   vehicle.addToWorld(world);
   
-  const p = { mesh, body, vehicle, isBot, hasBomb: false, alive: true };
+  const p = { mesh, body, vehicle, isBot, hasBomb: false, alive: true, data: carData };
   players.push(p);
   return p;
 }
@@ -337,11 +411,8 @@ function renderShop() {
     const owned = ownedCars.includes(car.id);
     div.className = `car-card ${owned ? 'owned' : ''}`;
     
-    // Preview on hover/click
     div.onclick = (e) => {
-      if(e.target.tagName !== 'BUTTON') {
-        updatePreviewCar(car.id);
-      }
+      if(e.target.tagName !== 'BUTTON') updatePreviewCar(car.id);
     };
 
     div.innerHTML = `
@@ -365,7 +436,7 @@ window.selectCar = (id, price, owned) => {
       selectedCar = id;
       updateCoins();
     } else {
-      alert("Not enough Drift Coins! Win a match to get more.");
+      alert("Not enough Drift Coins!");
     }
   }
   localStorage.setItem('ownedCars', JSON.stringify(ownedCars));
@@ -384,21 +455,25 @@ window.joinGame = (isPrivate) => {
   showScreen('lobbyScreen');
   gameState = 'LOBBY';
   renderShop();
-  updatePreviewCar(selectedCar); // Show current car on pedestal
-  selectMap(0); // Default map
+  updatePreviewCar(selectedCar);
+  selectMap(0);
 };
 
 window.selectMap = (index) => {
   selectedMap = index;
   document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('map' + index).classList.add('selected');
-  arenaMesh.material.color.setHex(mapColors[index]);
+  
+  if (index === 0) { arenaMat.map = makeGridTexture(0x555555); wallMat.emissive.setHex(0x555555); }
+  if (index === 1) { arenaMat.map = makeGridTexture(0xff0055); wallMat.emissive.setHex(0xff0055); }
+  if (index === 2) { arenaMat.map = makeGridTexture(0x00ffff); wallMat.emissive.setHex(0x00ffff); }
+  arenaMat.needsUpdate = true;
 };
 
 // --- 7. GAME LOGIC ---
 let bombHolder = null;
 let bombTimer = 30;
-let bombMesh = new THREE.Mesh(new THREE.SphereGeometry(0.8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+let bombMesh = new THREE.Mesh(new THREE.SphereGeometry(1.2), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
 scene.add(bombMesh);
 bombMesh.visible = false;
 
@@ -413,19 +488,20 @@ function resetGame() {
 window.startMatch = () => {
   showScreen(''); 
   document.getElementById('hud').style.display = 'block';
+  document.getElementById('clickOverlay').style.display = 'flex'; // Require click to capture mouse
   gameState = 'PLAYING';
   
-  // Hide preview
   if (previewCarGroup) { scene.remove(previewCarGroup); previewCarGroup = null; }
   
-  // Spawn Player
-  const p = spawnVehicle(0, 0, carsDB[selectedCar].color);
+  // Spawn Player safe away from bots (in center)
+  const p = spawnVehicle(0, 0, carsDB[selectedCar]);
   playerVehicle = p;
   
-  // Spawn 5 Bots
+  // Spawn Bots in a large circle (radius 120) to prevent overlapping freeze
   for(let i=0; i<5; i++) {
     const angle = (i/5) * Math.PI * 2;
-    spawnVehicle(Math.cos(angle)*50, Math.sin(angle)*50, 0xff00ff, true);
+    const randomCar = carsDB[Math.floor(Math.random()*carsDB.length)];
+    spawnVehicle(Math.cos(angle)*120, Math.sin(angle)*120, randomCar, true);
   }
   
   giveBomb(players[Math.floor(Math.random()*players.length)]);
@@ -473,6 +549,11 @@ function explodeBomb() {
 const keys = { w: false, a: false, s: false, d: false, space: false };
 let camAngle = 0;
 
+document.getElementById('clickOverlay').addEventListener('click', () => {
+  document.getElementById('clickOverlay').style.display = 'none';
+  renderer.domElement.requestPointerLock();
+});
+
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if(['w','a','s','d',' '].includes(k)) keys[k === ' ' ? 'space' : k] = true;
@@ -495,6 +576,10 @@ function animate() {
 
   try {
     if (gameState === 'PLAYING') {
+      if (document.pointerLockElement !== renderer.domElement && document.getElementById('clickOverlay').style.display === 'none') {
+        document.getElementById('clickOverlay').style.display = 'flex';
+      }
+
       if (bombHolder) {
         bombTimer -= dt;
         document.getElementById('bombTimer').innerText = Math.ceil(bombTimer);
@@ -502,20 +587,20 @@ function animate() {
         
         bombMesh.visible = true;
         bombMesh.position.copy(bombHolder.body.position);
-        bombMesh.position.y += 2;
-        bombMesh.rotation.y += dt * 2;
+        bombMesh.position.y += 2.5;
+        bombMesh.rotation.y += dt * 4;
         
         players.forEach(p => {
           if (p !== bombHolder && p.alive) {
             const dist = p.body.position.distanceTo(bombHolder.body.position);
-            if (dist < 4) giveBomb(p);
+            if (dist < 4.5) giveBomb(p);
           }
         });
       }
       
       if (playerVehicle && playerVehicle.alive) {
         const maxSteer = 0.4;
-        const engineForce = carsDB[selectedCar].speed;
+        const engineForce = playerVehicle.data.speed;
         const isDrifting = keys.space;
         
         playerVehicle.vehicle.setSteeringValue(keys.a ? maxSteer : keys.d ? -maxSteer : 0, 0);
@@ -532,7 +617,7 @@ function animate() {
           playerVehicle.vehicle.applyEngineForce(0, 3);
         }
         
-        playerVehicle.vehicle.wheelInfos.forEach(w => { w.frictionSlip = isDrifting ? 0.5 : 2.5; });
+        playerVehicle.vehicle.wheelInfos.forEach(w => { w.frictionSlip = isDrifting ? 0.5 : 3; });
         playerVehicle.vehicle.setBrake(isDrifting ? 10 : 0, 0);
         playerVehicle.vehicle.setBrake(isDrifting ? 10 : 0, 1);
         
@@ -564,8 +649,8 @@ function animate() {
           
           p.vehicle.setSteeringValue(Math.max(-0.4, Math.min(0.4, diff)), 0);
           p.vehicle.setSteeringValue(Math.max(-0.4, Math.min(0.4, diff)), 1);
-          p.vehicle.applyEngineForce(-300, 2);
-          p.vehicle.applyEngineForce(-300, 3);
+          p.vehicle.applyEngineForce(-400, 2);
+          p.vehicle.applyEngineForce(-400, 3);
         }
       });
       
@@ -596,17 +681,12 @@ function animate() {
         }
       }
     } else if (gameState === 'LOBBY') {
-      // Slow cinematic camera for the lobby background
       const time = clock.getElapsedTime();
-      camera.position.set(Math.sin(time * 0.2) * 25, 10, Math.cos(time * 0.2) * 25);
+      camera.position.set(Math.sin(time * 0.2) * 25, 8, Math.cos(time * 0.2) * 25);
       camera.lookAt(0, 3, 0);
-      
-      if (previewCarGroup) {
-        previewCarGroup.rotation.y += dt * 0.8;
-      }
+      if (previewCarGroup) previewCarGroup.rotation.y += dt * 0.8;
       world.step(1/60, dt, 3);
     } else {
-      // Home menu background camera
       camera.position.set(0, 20, 40);
       camera.lookAt(0, 0, 0);
     }
