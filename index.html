@@ -177,7 +177,34 @@
 <script type="module">
 import * as THREE from 'three';
 
-// --- 1. GLOBAL VARIABLES & ECONOMY ---
+// --- 1. AUDIO SYNTHESIZER ---
+let audioCtx;
+function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+function playTagSound() {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+  osc.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+}
+
+function playExplosionSound() {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+  gain.gain.setValueAtTime(1, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 1.5);
+}
+
+// --- 2. GLOBAL VARIABLES & ECONOMY ---
 let driftCoins = parseInt(localStorage.getItem('driftCoins')) || 0;
 let ownedCars = JSON.parse(localStorage.getItem('ownedCars')) || [0];
 let selectedCar = parseInt(localStorage.getItem('selectedCar')) || 0;
@@ -206,7 +233,7 @@ const effectsDB = [
   { id: 3, name: 'Rainbow', price: 1000, color: 0xff00ff }
 ];
 
-// --- 2. THREE.JS SETUP ---
+// --- 3. THREE.JS SETUP ---
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -222,7 +249,7 @@ sun.shadow.camera.left = -100; sun.shadow.camera.right = 100;
 sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
 scene.add(sun);
 
-// --- 3. WORLD GENERATION ---
+// --- 4. WORLD GENERATION ---
 const mapRadius = 80; 
 let worldGroup = new THREE.Group();
 scene.add(worldGroup);
@@ -304,7 +331,7 @@ function buildMap(index) {
   walls.position.y = 10; worldGroup.add(walls);
 }
 
-// --- 4. CAR FACTORY ---
+// --- 5. CAR FACTORY ---
 function createCarMesh(type, colorHex) {
   const g = new THREE.Group();
   const paint = new THREE.MeshStandardMaterial({ color: colorHex, metalness: 0.8, roughness: 0.1 });
@@ -362,7 +389,7 @@ function updatePreviewCar(id) {
   scene.add(previewCarGroup);
 }
 
-// --- 5. CUSTOM PHYSICS & PARTICLES ---
+// --- 6. CUSTOM PHYSICS & PARTICLES ---
 class Car {
   constructor(x, z, data, isBot = false) {
     this.data = data;
@@ -400,12 +427,12 @@ class Car {
       
       if (keys.space) this.speed *= 0.95;
     } else {
-      // Bot AI Engine
-      this.speed += this.accel * dt * 0.7; 
+      // Bot AI Engine (Slightly slower)
+      this.speed += this.accel * dt * 0.8; 
     }
 
     this.speed = Math.max(-this.maxSpeed/2, Math.min(this.maxSpeed, this.speed));
-    if (this.isBot) this.speed = Math.min(this.speed, this.maxSpeed * 0.85); // Bots slightly slower
+    if (this.isBot) this.speed = Math.min(this.speed, this.maxSpeed * 0.9);
 
     this.x += Math.sin(this.angle) * this.speed * dt;
     this.z += Math.cos(this.angle) * this.speed * dt;
@@ -431,6 +458,8 @@ class Car {
 // Explosions System
 let activeExplosions = [];
 function spawnExplosion(x, z, colorHex) {
+  playExplosionSound();
+  
   // Shockwave
   const geo = new THREE.SphereGeometry(1, 16, 16);
   const mat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 1 });
@@ -440,13 +469,13 @@ function spawnExplosion(x, z, colorHex) {
   activeExplosions.push({ mesh, life: 1.0 });
 
   // Particles
-  for(let i=0; i<30; i++) {
+  for(let i=0; i<40; i++) {
     const pGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
     const pMat = new THREE.MeshBasicMaterial({ color: colorHex });
     const pMesh = new THREE.Mesh(pGeo, pMat);
     pMesh.position.set(x, 1.5, z);
     pMesh.userData.vx = (Math.random() - 0.5) * 40;
-    pMesh.userData.vy = Math.random() * 25 + 5;
+    pMesh.userData.vy = Math.random() * 30 + 10;
     pMesh.userData.vz = (Math.random() - 0.5) * 40;
     scene.add(pMesh);
     activeExplosions.push({ mesh: pMesh, life: 1.0, isParticle: true });
@@ -457,7 +486,7 @@ const players = [];
 let playerVehicle = null;
 let cameraMode = 0;
 
-// --- 6. UI LOGIC ---
+// --- 7. UI LOGIC ---
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
   if (id) document.getElementById(id).classList.remove('hidden');
@@ -470,7 +499,6 @@ function updateCoins() {
 }
 
 function renderShops() {
-  // Cars
   const shop = document.getElementById('carShop');
   shop.innerHTML = '';
   carsDB.forEach(car => {
@@ -488,15 +516,12 @@ function renderShops() {
     shop.appendChild(div);
   });
 
-  // Effects
   const eShop = document.getElementById('effectShop');
   eShop.innerHTML = '';
   effectsDB.forEach(eff => {
     const div = document.createElement('div');
     const owned = ownedEffects.includes(eff.id);
     div.className = `car-card ${owned ? 'owned' : ''}`;
-    
-    // Preview effect color
     div.innerHTML = `
       <h3 style="color: #${eff.color.toString(16).padStart(6, '0')}">${eff.name}</h3>
       <p>${owned ? 'OWNED' : '🪙 ' + eff.price}</p>
@@ -531,7 +556,7 @@ window.selectEffect = (id, price, owned) => {
   renderShops();
 };
 
-window.showServerSelect = () => { updateCoins(); showScreen('serverScreen'); };
+window.showServerSelect = () => { updateCoins(); initAudio(); showScreen('serverScreen'); };
 
 window.joinGame = (isPrivate) => {
   if (isPrivate && document.getElementById('privateCode').value.length !== 5) {
@@ -551,13 +576,21 @@ window.selectMap = (index) => {
   buildMap(index);
 };
 
-// --- 7. GAME LOGIC ---
+// --- 8. GAME LOGIC ---
 let bombHolder = null;
 let bombTimer = 30;
 let tagCooldown = 0; 
-let bombMesh = new THREE.Mesh(new THREE.SphereGeometry(1.2), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+
+// Bigger Bomb Mesh
+let bombMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
 scene.add(bombMesh);
 bombMesh.visible = false;
+
+// Giant Arrow over bomb holder
+let bombArrow = new THREE.Mesh(new THREE.ConeGeometry(2, 4, 4), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+bombArrow.rotation.x = Math.PI;
+scene.add(bombArrow);
+bombArrow.visible = false;
 
 function resetGame() {
   players.forEach(p => scene.remove(p.mesh));
@@ -565,6 +598,7 @@ function resetGame() {
   playerVehicle = null;
   bombHolder = null;
   bombMesh.visible = false;
+  bombArrow.visible = false;
   bombTimer = 30;
   tagCooldown = 0;
   activeExplosions.forEach(e => scene.remove(e.mesh));
@@ -598,8 +632,10 @@ function giveBomb(player) {
   if (bombHolder) bombHolder.hasBomb = false;
   bombHolder = player;
   player.hasBomb = true;
-  bombTimer = 30; // Reset timer to 30 on tag
-  tagCooldown = 1.5; // 1.5 seconds before it can be tagged again
+  
+  bombTimer = 30; // Reset timer to 30
+  tagCooldown = 1.5; // 1.5s grace period
+  playTagSound();
   
   // Flash effect
   const flash = document.getElementById('flashOverlay');
@@ -635,14 +671,14 @@ function explodeBomb() {
       gameState = 'LOBBY';
       resetGame();
       updatePreviewCar(selectedCar);
-    }, 1000); // Wait 1 second so you can see the explosion before the popup
+    }, 1000); // 1s delay to see explosion
     return;
   }
   
   giveBomb(alive[Math.floor(Math.random()*alive.length)]);
 }
 
-// --- 8. CONTROLS ---
+// --- 9. CONTROLS ---
 const keys = { w: false, a: false, s: false, d: false, space: false };
 let camAngle = 0;
 
@@ -664,7 +700,7 @@ document.addEventListener('mousemove', e => {
   if (document.pointerLockElement === renderer.domElement) camAngle -= e.movementX * 0.002;
 });
 
-// --- 9. MAIN LOOP ---
+// --- 10. MAIN LOOP ---
 const clock = new THREE.Clock();
 
 function animate() {
@@ -699,13 +735,13 @@ function animate() {
         document.getElementById('clickOverlay').style.display = 'flex';
       }
 
-      // 1. Bot AI Logic (Update before movement)
+      // 1. Bot AI Logic (FIXED: Bots chase everyone and flee smartly)
       players.forEach(p => {
         if (p.isBot && p.alive) {
-          let targetX = 0, targetZ = 0;
+          let targetX = p.x, targetZ = p.z;
           
           if (p.hasBomb) {
-            // Chase nearest player
+            // Chase nearest player (including other bots!)
             let nearest = null, minDist = Infinity;
             players.forEach(other => {
               if (other !== p && other.alive) {
@@ -715,18 +751,25 @@ function animate() {
             });
             if (nearest) { targetX = nearest.x; targetZ = nearest.z; }
           } else if (bombHolder) {
-            // Flee from bomb holder (calculate opposite direction)
-            const dx = p.x - bombHolder.x;
-            const dz = p.z - bombHolder.z;
-            const dist = Math.hypot(dx, dz) || 1;
-            targetX = p.x + (dx / dist) * 60; // Move far away
-            targetZ = p.z + (dz / dist) * 60;
+            // Flee from bomb holder
+            let fleeX = p.x - bombHolder.x;
+            let fleeZ = p.z - bombHolder.z;
+            const distToBomb = Math.hypot(fleeX, fleeZ) || 1;
+            fleeX /= distToBomb; fleeZ /= distToBomb;
             
-            // Keep them inside the map bounds
-            const distCenter = Math.hypot(targetX, targetZ);
-            if (distCenter > mapRadius - 15) {
-              targetX = (targetX / distCenter) * (mapRadius - 15);
-              targetZ = (targetZ / distCenter) * (mapRadius - 15);
+            // Prevent bots from getting stuck on the edge
+            const distFromCenter = Math.hypot(p.x, p.z);
+            if (distFromCenter > mapRadius - 20) {
+              // Drive parallel to the wall
+              const tangentX = -p.z;
+              const tangentZ = p.x;
+              const tanLen = Math.hypot(tangentX, tangentZ) || 1;
+              targetX = p.x + (tangentX/tanLen) * 60;
+              targetZ = p.z + (tangentZ/tanLen) * 60;
+            } else {
+              // Drive away from bomb
+              targetX = p.x + fleeX * 80;
+              targetZ = p.z + fleeZ * 80;
             }
           }
           
@@ -740,7 +783,7 @@ function animate() {
         p.update(dt);
       });
 
-      // 2. Bomb Timer & Collision Logic
+      // 2. Bomb Timer & Collision Logic (FIXED: Break loop after 1 tag)
       if (bombHolder) {
         if (tagCooldown > 0) tagCooldown -= dt;
 
@@ -749,19 +792,24 @@ function animate() {
         if (bombTimer <= 0) explodeBomb();
         
         bombMesh.visible = true;
-        bombMesh.position.set(bombHolder.x, 3, bombHolder.z);
+        bombMesh.position.set(bombHolder.x, 2, bombHolder.z);
         bombMesh.rotation.y += dt * 4;
         
-        // Only check collisions if cooldown is up
+        bombArrow.visible = true;
+        bombArrow.position.set(bombHolder.x, 7, bombHolder.z);
+        bombArrow.rotation.y += dt * 2; // Spin arrow
+        
         if (tagCooldown <= 0) {
-          players.forEach(p => {
+          for (let p of players) {
             if (p !== bombHolder && p.alive) {
+              // INCREASED HITBOX TO 9.0 so it registers easily
               const dist = Math.hypot(p.x - bombHolder.x, p.z - bombHolder.z);
-              if (dist < 7.5) {
+              if (dist < 9.0) {
                 giveBomb(p);
+                break; // CRITICAL FIX: Stop checking other players once the bomb is passed!
               }
             }
-          });
+          }
         }
       }
       
