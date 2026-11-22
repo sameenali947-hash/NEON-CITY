@@ -9,6 +9,9 @@
   body{margin:0;overflow:hidden;background:#111;font-family:'Montserrat',sans-serif;color:#fff;user-select:none}
   canvas{display:block}
   
+  /* Flash Effect */
+  #flashOverlay{position:fixed;inset:0;background:#ff0000;opacity:0;pointer-events:none;z-index:90;transition:opacity 0.2s;display:flex;align-items:center;justify-content:center;font-size:80px;font-weight:900;color:#fff;text-shadow:0 0 20px #000}
+
   /* HUD */
   #hud{position:fixed;inset:0;pointer-events:none;z-index:10;display:none}
   #topBar{position:absolute;top:20px;left:50%;transform:translateX(-50%);text-align:center}
@@ -32,12 +35,12 @@
   .btn-pink{background:#ff00ff;color:#fff}
   .btn-pink:hover{box-shadow:0 0 20px #ff00ff}
   
-  /* Lobby Layout */
+  /* Lobby Layout - Now 3 Columns */
   #lobbyScreen {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     grid-template-rows: auto 1fr auto;
-    gap: 20px;
+    gap: 15px;
     padding: 20px;
     background: linear-gradient(135deg, rgba(10,10,20,0.95) 0%, rgba(30,10,40,0.9) 100%);
   }
@@ -48,7 +51,7 @@
     background: rgba(0,0,0,0.7);
     border: 2px solid #00ffff;
     border-radius: 15px;
-    padding: 20px;
+    padding: 15px;
     display: flex;
     flex-direction: column;
     box-shadow: 0 0 20px rgba(0,255,255,0.2);
@@ -59,19 +62,19 @@
   .panel::-webkit-scrollbar-track { background: rgba(0,0,0,0.5); border-radius: 5px; }
   .panel::-webkit-scrollbar-thumb { background: #00ffff; border-radius: 5px; }
   
-  /* Car Shop */
-  .shop-grid{display:grid;grid-template-columns:repeat(2, 1fr);gap:15px;}
-  .car-card{background:rgba(255,255,255,0.05);border:2px solid #555;padding:15px;border-radius:10px;text-align:center;cursor:pointer;transition:0.2s}
+  /* Shops */
+  .shop-grid{display:grid;grid-template-columns:1fr;gap:10px;}
+  .car-card{background:rgba(255,255,255,0.05);border:2px solid #555;padding:10px;border-radius:10px;text-align:center;cursor:pointer;transition:0.2s}
   .car-card:hover{border-color:#00ffff;transform:scale(1.02)}
   .car-card.owned{border-color:#00ff00}
-  .car-card h3{margin:0 0 5px;color:#fff;font-size:16px}
-  .car-card p{margin:0 0 10px;color:#ffcc00;font-weight:bold;font-size:14px}
+  .car-card h3{margin:0 0 5px;color:#fff;font-size:14px}
+  .car-card p{margin:0 0 5px;color:#ffcc00;font-weight:bold;font-size:12px}
   
   /* Map Voting */
-  .vote-grid { display: flex; flex-direction: column; gap: 15px; }
+  .vote-grid { display: flex; flex-direction: column; gap: 10px; }
   .map-btn {
-    padding: 20px; font-size: 24px; font-weight: 900; color: #fff;
-    border: 3px solid #555; border-radius: 15px; cursor: pointer;
+    padding: 15px; font-size: 18px; font-weight: 900; color: #fff;
+    border: 3px solid #555; border-radius: 10px; cursor: pointer;
     transition: 0.2s; text-align: center;
   }
   .map-btn:hover { border-color: #fff; transform: scale(1.02); }
@@ -92,6 +95,7 @@
 </head>
 <body>
 
+<div id="flashOverlay">TAGGED!</div>
 <div id="clickOverlay">CLICK TO PLAY</div>
 
 <div id="hud">
@@ -151,6 +155,11 @@
     </div>
   </div>
 
+  <div class="panel">
+    <h2>EFFECTS SHOP</h2>
+    <div class="shop-grid" id="effectShop"></div>
+  </div>
+
   <div class="bottom-bar">
     <div id="lobbyCoins">🪙 0 Drift Coins</div>
     <button id="startBtn" onclick="startMatch()">START MATCH NOW</button>
@@ -172,6 +181,10 @@ import * as THREE from 'three';
 let driftCoins = parseInt(localStorage.getItem('driftCoins')) || 0;
 let ownedCars = JSON.parse(localStorage.getItem('ownedCars')) || [0];
 let selectedCar = parseInt(localStorage.getItem('selectedCar')) || 0;
+
+let ownedEffects = JSON.parse(localStorage.getItem('ownedEffects')) || [0];
+let selectedEffect = parseInt(localStorage.getItem('selectedEffect')) || 0;
+
 let gameState = 'HOME'; 
 let selectedMap = 0;
 
@@ -184,6 +197,13 @@ const carsDB = [
   { id: 5, name: 'Mustang', price: 800, color: 0x222222, speed: 42, type: 'mustang' },
   { id: 6, name: 'Pink Drift', price: 2000, color: 0xff00aa, speed: 48, type: 'drift' },
   { id: 7, name: 'Ranger', price: 2500, color: 0x666666, speed: 36, type: 'pickup' }
+];
+
+const effectsDB = [
+  { id: 0, name: 'Basic Boom', price: 0, color: 0xff0000 },
+  { id: 1, name: 'Supernova', price: 200, color: 0xffaa00 },
+  { id: 2, name: 'Cyber Blast', price: 500, color: 0x00ffff },
+  { id: 3, name: 'Rainbow', price: 1000, color: 0xff00ff }
 ];
 
 // --- 2. THREE.JS SETUP ---
@@ -215,19 +235,13 @@ function buildMap(index) {
   clearMap();
   
   if (index === 0) {
-    // 🏖️ BEACH
+    // BEACH
     scene.background = new THREE.Color(0x87CEEB);
     scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
-    
-    // Sand Floor
     const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ color: 0xe6d5b8, roughness: 0.9 }));
     floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
-    
-    // Ocean Ring
     const water = new THREE.Mesh(new THREE.RingGeometry(mapRadius, mapRadius+80, 64), new THREE.MeshStandardMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8 }));
     water.rotation.x = -Math.PI/2; water.position.y = -0.2; worldGroup.add(water);
-
-    // Palm Trees (Outside Arena)
     for(let i=0; i<16; i++) {
       const angle = (i/16) * Math.PI * 2;
       const x = Math.cos(angle) * (mapRadius + 10);
@@ -245,35 +259,26 @@ function buildMap(index) {
     }
   } 
   else if (index === 1) {
-    // 🏙️ CITY
+    // CITY
     scene.background = new THREE.Color(0xff7e5f);
     scene.fog = new THREE.Fog(0xff7e5f, 50, 150);
-    
-    // Asphalt Floor
     const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 }));
     floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
-    
-    // Neon Skyscrapers (Outside Arena)
     for(let i=0; i<24; i++) {
       const angle = (i/24) * Math.PI * 2;
       const dist = mapRadius + 20 + Math.random()*20;
-      const x = Math.cos(angle) * dist;
-      const z = Math.sin(angle) * dist;
-      const h = Math.random() * 60 + 20;
-      const w = Math.random() * 15 + 10;
+      const x = Math.cos(angle) * dist; const z = Math.sin(angle) * dist;
+      const h = Math.random() * 60 + 20; const w = Math.random() * 15 + 10;
       const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial({ color: 0x111122 }));
       b.position.set(x, h/2, z); worldGroup.add(b);
-      // Neon strip
       const neon = new THREE.Mesh(new THREE.BoxGeometry(w+1, 2, w+1), new THREE.MeshBasicMaterial({ color: Math.random()>0.5?0xff00ff:0x00ffff }));
       neon.position.set(x, Math.random()*h, z); worldGroup.add(neon);
     }
   } 
   else {
-    // 🌌 CYBER
+    // CYBER
     scene.background = new THREE.Color(0x050010);
     scene.fog = new THREE.Fog(0x050010, 50, 150);
-    
-    // Grid Floor
     const gridC = document.createElement('canvas'); gridC.width=512; gridC.height=512;
     const gCtx = gridC.getContext('2d');
     gCtx.fillStyle = '#000'; gCtx.fillRect(0,0,512,512);
@@ -284,21 +289,16 @@ function buildMap(index) {
     }
     const gridTex = new THREE.CanvasTexture(gridC);
     gridTex.wrapS = gridTex.wrapT = THREE.RepeatWrapping; gridTex.repeat.set(10, 10);
-    
     const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ map: gridTex, emissive: 0x00ffff, emissiveIntensity: 0.2 }));
     floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
-    
-    // Glowing Pillars
     for(let i=0; i<12; i++) {
       const angle = (i/12) * Math.PI * 2;
-      const x = Math.cos(angle) * (mapRadius + 15);
-      const z = Math.sin(angle) * (mapRadius + 15);
+      const x = Math.cos(angle) * (mapRadius + 15); const z = Math.sin(angle) * (mapRadius + 15);
       const p = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 40), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff00ff, emissiveIntensity: 0.8 }));
       p.position.set(x, 20, z); worldGroup.add(p);
     }
   }
   
-  // Arena Walls (Invisible boundary but visible glass)
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, side: THREE.BackSide, transparent: true, opacity: 0.1, emissive: 0x00ffff, emissiveIntensity: 0.5 });
   const walls = new THREE.Mesh(new THREE.CylinderGeometry(mapRadius, mapRadius, 20, 64, 1, true), wallMat);
   walls.position.y = 10; worldGroup.add(walls);
@@ -362,7 +362,7 @@ function updatePreviewCar(id) {
   scene.add(previewCarGroup);
 }
 
-// --- 5. BULLETPROOF ARCADE PHYSICS ---
+// --- 5. CUSTOM PHYSICS & PARTICLES ---
 class Car {
   constructor(x, z, data, isBot = false) {
     this.data = data;
@@ -400,10 +400,12 @@ class Car {
       
       if (keys.space) this.speed *= 0.95;
     } else {
-      this.speed += this.accel * dt * 0.8; // Bot AI
+      // Bot AI Engine
+      this.speed += this.accel * dt * 0.7; 
     }
 
     this.speed = Math.max(-this.maxSpeed/2, Math.min(this.maxSpeed, this.speed));
+    if (this.isBot) this.speed = Math.min(this.speed, this.maxSpeed * 0.85); // Bots slightly slower
 
     this.x += Math.sin(this.angle) * this.speed * dt;
     this.z += Math.cos(this.angle) * this.speed * dt;
@@ -426,6 +428,31 @@ class Car {
   }
 }
 
+// Explosions System
+let activeExplosions = [];
+function spawnExplosion(x, z, colorHex) {
+  // Shockwave
+  const geo = new THREE.SphereGeometry(1, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 1 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, 1.5, z);
+  scene.add(mesh);
+  activeExplosions.push({ mesh, life: 1.0 });
+
+  // Particles
+  for(let i=0; i<30; i++) {
+    const pGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+    const pMat = new THREE.MeshBasicMaterial({ color: colorHex });
+    const pMesh = new THREE.Mesh(pGeo, pMat);
+    pMesh.position.set(x, 1.5, z);
+    pMesh.userData.vx = (Math.random() - 0.5) * 40;
+    pMesh.userData.vy = Math.random() * 25 + 5;
+    pMesh.userData.vz = (Math.random() - 0.5) * 40;
+    scene.add(pMesh);
+    activeExplosions.push({ mesh: pMesh, life: 1.0, isParticle: true });
+  }
+}
+
 const players = [];
 let playerVehicle = null;
 let cameraMode = 0;
@@ -442,46 +469,66 @@ function updateCoins() {
   localStorage.setItem('driftCoins', driftCoins);
 }
 
-function renderShop() {
+function renderShops() {
+  // Cars
   const shop = document.getElementById('carShop');
   shop.innerHTML = '';
   carsDB.forEach(car => {
     const div = document.createElement('div');
     const owned = ownedCars.includes(car.id);
     div.className = `car-card ${owned ? 'owned' : ''}`;
-    
-    div.onclick = (e) => {
-      if(e.target.tagName !== 'BUTTON') updatePreviewCar(car.id);
-    };
-
+    div.onclick = (e) => { if(e.target.tagName !== 'BUTTON') updatePreviewCar(car.id); };
     div.innerHTML = `
       <h3>${car.name}</h3>
       <p>${owned ? 'OWNED' : '🪙 ' + car.price}</p>
-      <button class="btn ${owned ? 'btn-pink' : ''}" style="padding:8px 15px; font-size:14px;" onclick="selectCar(${car.id}, ${car.price}, ${owned})">
+      <button class="btn ${owned ? 'btn-pink' : ''}" style="padding:5px 10px; font-size:12px;" onclick="selectCar(${car.id}, ${car.price}, ${owned})">
         ${selectedCar === car.id ? 'SELECTED' : (owned ? 'SELECT' : 'BUY')}
       </button>
     `;
     shop.appendChild(div);
   });
+
+  // Effects
+  const eShop = document.getElementById('effectShop');
+  eShop.innerHTML = '';
+  effectsDB.forEach(eff => {
+    const div = document.createElement('div');
+    const owned = ownedEffects.includes(eff.id);
+    div.className = `car-card ${owned ? 'owned' : ''}`;
+    
+    // Preview effect color
+    div.innerHTML = `
+      <h3 style="color: #${eff.color.toString(16).padStart(6, '0')}">${eff.name}</h3>
+      <p>${owned ? 'OWNED' : '🪙 ' + eff.price}</p>
+      <button class="btn ${owned ? 'btn-pink' : ''}" style="padding:5px 10px; font-size:12px;" onclick="selectEffect(${eff.id}, ${eff.price}, ${owned})">
+        ${selectedEffect === eff.id ? 'SELECTED' : (owned ? 'SELECT' : 'BUY')}
+      </button>
+    `;
+    eShop.appendChild(div);
+  });
 }
 
 window.selectCar = (id, price, owned) => {
-  if (owned) {
-    selectedCar = id;
-  } else {
-    if (driftCoins >= price) {
-      driftCoins -= price;
-      ownedCars.push(id);
-      selectedCar = id;
-      updateCoins();
-    } else {
-      alert("Not enough Drift Coins!");
-    }
+  if (owned) selectedCar = id;
+  else {
+    if (driftCoins >= price) { driftCoins -= price; ownedCars.push(id); selectedCar = id; updateCoins(); }
+    else alert("Not enough Drift Coins!");
   }
   localStorage.setItem('ownedCars', JSON.stringify(ownedCars));
   localStorage.setItem('selectedCar', selectedCar);
-  renderShop();
+  renderShops();
   updatePreviewCar(id);
+};
+
+window.selectEffect = (id, price, owned) => {
+  if (owned) selectedEffect = id;
+  else {
+    if (driftCoins >= price) { driftCoins -= price; ownedEffects.push(id); selectedEffect = id; updateCoins(); }
+    else alert("Not enough Drift Coins!");
+  }
+  localStorage.setItem('ownedEffects', JSON.stringify(ownedEffects));
+  localStorage.setItem('selectedEffect', selectedEffect);
+  renderShops();
 };
 
 window.showServerSelect = () => { updateCoins(); showScreen('serverScreen'); };
@@ -490,10 +537,9 @@ window.joinGame = (isPrivate) => {
   if (isPrivate && document.getElementById('privateCode').value.length !== 5) {
     alert("Enter a 5-digit code!"); return;
   }
-  
   showScreen('lobbyScreen');
   gameState = 'LOBBY';
-  renderShop();
+  renderShops();
   updatePreviewCar(selectedCar);
   selectMap(0);
 };
@@ -508,6 +554,7 @@ window.selectMap = (index) => {
 // --- 7. GAME LOGIC ---
 let bombHolder = null;
 let bombTimer = 30;
+let tagCooldown = 0; 
 let bombMesh = new THREE.Mesh(new THREE.SphereGeometry(1.2), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
 scene.add(bombMesh);
 bombMesh.visible = false;
@@ -519,6 +566,9 @@ function resetGame() {
   bombHolder = null;
   bombMesh.visible = false;
   bombTimer = 30;
+  tagCooldown = 0;
+  activeExplosions.forEach(e => scene.remove(e.mesh));
+  activeExplosions = [];
 }
 
 window.startMatch = () => {
@@ -528,7 +578,6 @@ window.startMatch = () => {
   gameState = 'PLAYING';
   
   if (previewCarGroup) { scene.remove(previewCarGroup); previewCarGroup = null; }
-  
   buildMap(selectedMap);
   
   playerVehicle = new Car(0, 0, carsDB[selectedCar], false);
@@ -537,7 +586,7 @@ window.startMatch = () => {
   for(let i=0; i<5; i++) {
     const angle = (i/5) * Math.PI * 2;
     const randomCar = carsDB[Math.floor(Math.random()*carsDB.length)];
-    const bot = new Car(Math.cos(angle)*30, Math.sin(angle)*30, randomCar, true);
+    const bot = new Car(Math.cos(angle)*35, Math.sin(angle)*35, randomCar, true);
     players.push(bot);
   }
   
@@ -549,7 +598,13 @@ function giveBomb(player) {
   if (bombHolder) bombHolder.hasBomb = false;
   bombHolder = player;
   player.hasBomb = true;
-  bombTimer = 30;
+  bombTimer = 30; // Reset timer to 30 on tag
+  tagCooldown = 1.5; // 1.5 seconds before it can be tagged again
+  
+  // Flash effect
+  const flash = document.getElementById('flashOverlay');
+  flash.style.opacity = 0.6;
+  setTimeout(() => flash.style.opacity = 0, 100);
   
   if (player === playerVehicle) {
     document.getElementById('bombPrompt').style.display = 'block';
@@ -562,19 +617,25 @@ function explodeBomb() {
   bombHolder.alive = false;
   bombHolder.mesh.visible = false;
   
+  // Spawn visual explosion based on selected effect
+  const effectData = effectsDB.find(e => e.id === selectedEffect);
+  spawnExplosion(bombHolder.x, bombHolder.z, effectData.color);
+  
   const alive = players.filter(p => p.alive);
   if (alive.length === 1) {
-    if (alive[0] === playerVehicle) {
-      driftCoins += 100;
-      updateCoins();
-      alert("YOU WIN! +100 Drift Coins");
-    } else {
-      alert("You were eliminated!");
-    }
-    showScreen('lobbyScreen');
-    gameState = 'LOBBY';
-    resetGame();
-    updatePreviewCar(selectedCar);
+    setTimeout(() => {
+      if (alive[0] === playerVehicle) {
+        driftCoins += 100;
+        updateCoins();
+        alert("YOU WIN! +100 Drift Coins");
+      } else {
+        alert("You were eliminated!");
+      }
+      showScreen('lobbyScreen');
+      gameState = 'LOBBY';
+      resetGame();
+      updatePreviewCar(selectedCar);
+    }, 1000); // Wait 1 second so you can see the explosion before the popup
     return;
   }
   
@@ -611,32 +672,40 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.1);
 
   try {
+    // Update Explosions
+    for (let i = activeExplosions.length - 1; i >= 0; i--) {
+      const exp = activeExplosions[i];
+      exp.life -= dt * 1.5;
+      if (exp.life <= 0) {
+        scene.remove(exp.mesh);
+        activeExplosions.splice(i, 1);
+      } else {
+        if (exp.isParticle) {
+          exp.mesh.position.x += exp.mesh.userData.vx * dt;
+          exp.mesh.position.y += exp.mesh.userData.vy * dt;
+          exp.mesh.position.z += exp.mesh.userData.vz * dt;
+          exp.mesh.userData.vy -= 40 * dt; // Gravity
+          exp.mesh.rotation.x += dt * 10;
+          exp.mesh.rotation.y += dt * 10;
+        } else {
+          exp.mesh.scale.setScalar(1 + (1 - exp.life) * 15);
+          exp.mesh.material.opacity = exp.life;
+        }
+      }
+    }
+
     if (gameState === 'PLAYING') {
       if (document.pointerLockElement !== renderer.domElement && document.getElementById('clickOverlay').style.display === 'none') {
         document.getElementById('clickOverlay').style.display = 'flex';
       }
 
-      if (bombHolder) {
-        bombTimer -= dt;
-        document.getElementById('bombTimer').innerText = Math.ceil(bombTimer);
-        if (bombTimer <= 0) explodeBomb();
-        
-        bombMesh.visible = true;
-        bombMesh.position.set(bombHolder.x, 3, bombHolder.z);
-        bombMesh.rotation.y += dt * 4;
-        
-        players.forEach(p => {
-          if (p !== bombHolder && p.alive) {
-            const dist = Math.hypot(p.x - bombHolder.x, p.z - bombHolder.z);
-            if (dist < 4.5) giveBomb(p);
-          }
-        });
-      }
-      
+      // 1. Bot AI Logic (Update before movement)
       players.forEach(p => {
         if (p.isBot && p.alive) {
           let targetX = 0, targetZ = 0;
+          
           if (p.hasBomb) {
+            // Chase nearest player
             let nearest = null, minDist = Infinity;
             players.forEach(other => {
               if (other !== p && other.alive) {
@@ -646,10 +715,22 @@ function animate() {
             });
             if (nearest) { targetX = nearest.x; targetZ = nearest.z; }
           } else if (bombHolder) {
-            targetX = p.x - (bombHolder.x - p.x);
-            targetZ = p.z - (bombHolder.z - p.z);
+            // Flee from bomb holder (calculate opposite direction)
+            const dx = p.x - bombHolder.x;
+            const dz = p.z - bombHolder.z;
+            const dist = Math.hypot(dx, dz) || 1;
+            targetX = p.x + (dx / dist) * 60; // Move far away
+            targetZ = p.z + (dz / dist) * 60;
+            
+            // Keep them inside the map bounds
+            const distCenter = Math.hypot(targetX, targetZ);
+            if (distCenter > mapRadius - 15) {
+              targetX = (targetX / distCenter) * (mapRadius - 15);
+              targetZ = (targetZ / distCenter) * (mapRadius - 15);
+            }
           }
           
+          // Steer toward target
           const angleToTarget = Math.atan2(targetX - p.x, targetZ - p.z);
           let diff = angleToTarget - p.angle;
           while(diff > Math.PI) diff -= Math.PI*2;
@@ -658,7 +739,33 @@ function animate() {
         }
         p.update(dt);
       });
+
+      // 2. Bomb Timer & Collision Logic
+      if (bombHolder) {
+        if (tagCooldown > 0) tagCooldown -= dt;
+
+        bombTimer -= dt;
+        document.getElementById('bombTimer').innerText = Math.ceil(bombTimer);
+        if (bombTimer <= 0) explodeBomb();
+        
+        bombMesh.visible = true;
+        bombMesh.position.set(bombHolder.x, 3, bombHolder.z);
+        bombMesh.rotation.y += dt * 4;
+        
+        // Only check collisions if cooldown is up
+        if (tagCooldown <= 0) {
+          players.forEach(p => {
+            if (p !== bombHolder && p.alive) {
+              const dist = Math.hypot(p.x - bombHolder.x, p.z - bombHolder.z);
+              if (dist < 7.5) {
+                giveBomb(p);
+              }
+            }
+          });
+        }
+      }
       
+      // 3. Camera Logic
       if (playerVehicle && playerVehicle.alive) {
         if (cameraMode === 0) { 
           camera.position.set(playerVehicle.x - Math.sin(camAngle)*12, 6, playerVehicle.z - Math.cos(camAngle)*12);
