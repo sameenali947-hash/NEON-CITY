@@ -14,13 +14,17 @@
 
   /* HUD */
   #hud{position:fixed;inset:0;pointer-events:none;z-index:10;display:none}
-  #topBar{position:absolute;top:20px;left:50%;transform:translateX(-50%);text-align:center}
-  #bombTimer{font-size:60px;font-weight:900;color:#ff0000;text-shadow:0 0 30px #ff0000;display:none}
-  #bombPrompt{font-size:24px;color:#fff;text-shadow:0 2px 5px #000;background:rgba(255,0,0,0.8);padding:10px 30px;border-radius:20px;margin-top:10px;display:none;animation:pulse 0.5s infinite alternate}
+  #topBar{position:absolute;top:20px;left:50%;transform:translateX(-50%);text-align:center;display:flex;flex-direction:column;align-items:center}
+  #bombTimer{font-size:70px;font-weight:900;color:#ff0000;text-shadow:0 0 30px #ff0000;display:none;line-height:1;}
+  #bombPrompt{font-size:16px;color:#fff;text-shadow:0 2px 5px #000;background:rgba(255,0,0,0.9);padding:8px 20px;border-radius:20px;margin-top:5px;display:none;animation:pulse 0.5s infinite alternate;border:2px solid #fff;}
   @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }
   #speedo{position:absolute;bottom:30px;right:30px;font-size:50px;font-weight:900;font-style:italic;text-shadow:0 0 10px #00ffff}
   #speedo span{font-size:16px;color:#00ffff}
   
+  /* Spectator Mode */
+  #spectateText{position:absolute;top:40%;left:50%;transform:translate(-50%, -50%);font-size:50px;font-weight:900;color:#fff;text-shadow:0 0 20px #ff0000;display:none;text-align:center}
+  #spectateSub{font-size:20px;color:#00ffff;margin-top:10px}
+
   /* Click to Play Overlay */
   #clickOverlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.3);display:none;align-items:center;justify-content:center;font-size:50px;font-weight:900;color:#fff;text-shadow:0 0 20px #00ffff;cursor:pointer;backdrop-filter:blur(2px)}
   
@@ -103,6 +107,7 @@
     <div id="bombTimer">30</div>
     <div id="bombPrompt">YOU HAVE THE BOMB! RAM SOMEONE!</div>
   </div>
+  <div id="spectateText">YOU DIED!<div id="spectateSub">Spectating...</div></div>
   <div id="speedo">0 <span>KM/H</span></div>
 </div>
 
@@ -251,9 +256,11 @@ scene.add(sun);
 const mapRadius = 80; 
 let worldGroup = new THREE.Group();
 scene.add(worldGroup);
+let obstacles = []; // {x, z, r}
 
 function clearMap() {
   while(worldGroup.children.length > 0){ worldGroup.remove(worldGroup.children[0]); }
+  obstacles = [];
 }
 
 function buildMap(index) {
@@ -265,16 +272,37 @@ function buildMap(index) {
     scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
     const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ color: 0xe6d5b8, roughness: 0.9 }));
     floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
-    const water = new THREE.Mesh(new THREE.RingGeometry(mapRadius, mapRadius+80, 64), new THREE.MeshStandardMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8 }));
+    
+    // Cooler Water
+    const water = new THREE.Mesh(new THREE.RingGeometry(mapRadius, mapRadius+100, 64), new THREE.MeshStandardMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8, metalness: 0.5, roughness: 0.1 }));
     water.rotation.x = -Math.PI/2; water.position.y = -0.2; worldGroup.add(water);
-    // Rocks
-    for(let i=0; i<12; i++) {
+    
+    // Palm Trees & Rocks
+    for(let i=0; i<15; i++) {
       const angle = Math.random() * Math.PI * 2;
       const r = Math.random() * (mapRadius - 20);
-      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(Math.random()*3+2), new THREE.MeshStandardMaterial({ color: 0x888888 }));
-      rock.position.set(Math.cos(angle)*r, 1, Math.sin(angle)*r);
-      rock.rotation.set(Math.random(), Math.random(), Math.random());
-      worldGroup.add(rock);
+      const x = Math.cos(angle)*r; const z = Math.sin(angle)*r;
+      
+      if (i % 2 === 0) {
+        // Tree
+        const tree = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1, 15), new THREE.MeshStandardMaterial({ color: 0x5c4033 }));
+        trunk.position.y = 7.5; tree.add(trunk);
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x228822 });
+        for(let l=0; l<5; l++) {
+          const leaf = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 2), leafMat);
+          leaf.position.y = 15; leaf.rotation.y = (l/5)*Math.PI*2; leaf.rotation.x = Math.PI/4;
+          tree.add(leaf);
+        }
+        tree.position.set(x, 0, z); worldGroup.add(tree);
+        obstacles.push({x, z, r: 2});
+      } else {
+        // Rock
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(Math.random()*3+3), new THREE.MeshStandardMaterial({ color: 0x777777 }));
+        rock.position.set(x, 1.5, z); rock.rotation.set(Math.random(), Math.random(), Math.random());
+        worldGroup.add(rock);
+        obstacles.push({x, z, r: 4});
+      }
     }
   } 
   else if (index === 1) {
@@ -283,15 +311,20 @@ function buildMap(index) {
     scene.fog = new THREE.Fog(0xff7e5f, 50, 150);
     const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 }));
     floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
+    
     // Neon Skyscrapers inside the arena
-    for(let i=0; i<8; i++) {
-      const angle = (i/8) * Math.PI * 2;
-      const r = mapRadius / 2;
-      const h = Math.random() * 40 + 20;
-      const b = new THREE.Mesh(new THREE.BoxGeometry(10, h, 10), new THREE.MeshStandardMaterial({ color: 0x111122 }));
+    for(let i=0; i<10; i++) {
+      const angle = (i/10) * Math.PI * 2;
+      const r = Math.random() * (mapRadius - 20) + 10;
+      const h = Math.random() * 50 + 20;
+      const w = Math.random() * 10 + 8;
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial({ color: 0x111122 }));
       b.position.set(Math.cos(angle)*r, h/2, Math.sin(angle)*r); worldGroup.add(b);
-      const neon = new THREE.Mesh(new THREE.BoxGeometry(11, 2, 11), new THREE.MeshBasicMaterial({ color: Math.random()>0.5?0xff00ff:0x00ffff }));
+      
+      const neon = new THREE.Mesh(new THREE.BoxGeometry(w+1, 2, w+1), new THREE.MeshBasicMaterial({ color: Math.random()>0.5?0xff00ff:0x00ffff }));
       neon.position.set(Math.cos(angle)*r, Math.random()*h, Math.sin(angle)*r); worldGroup.add(neon);
+      
+      obstacles.push({x: Math.cos(angle)*r, z: Math.sin(angle)*r, r: w/1.5});
     }
   } 
   else {
@@ -301,64 +334,84 @@ function buildMap(index) {
     const gridC = document.createElement('canvas'); gridC.width=512; gridC.height=512;
     const gCtx = gridC.getContext('2d');
     gCtx.fillStyle = '#000'; gCtx.fillRect(0,0,512,512);
-    gCtx.strokeStyle = '#00ffff'; gCtx.lineWidth = 2;
+    gCtx.strokeStyle = '#00ffff'; gCtx.lineWidth = 4;
     for(let i=0; i<=512; i+=64) {
       gCtx.beginPath(); gCtx.moveTo(i,0); gCtx.lineTo(i,512); gCtx.stroke();
       gCtx.beginPath(); gCtx.moveTo(0,i); gCtx.lineTo(512,i); gCtx.stroke();
     }
     const gridTex = new THREE.CanvasTexture(gridC);
     gridTex.wrapS = gridTex.wrapT = THREE.RepeatWrapping; gridTex.repeat.set(10, 10);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ map: gridTex, emissive: 0x00ffff, emissiveIntensity: 0.2 }));
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ map: gridTex, emissive: 0x00ffff, emissiveIntensity: 0.5 }));
     floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
-    // Floating Rings
-    for(let i=0; i<6; i++) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(8, 1, 8, 32), new THREE.MeshBasicMaterial({ color: 0xff00ff }));
-      ring.position.set((Math.random()-0.5)*100, Math.random()*15+5, (Math.random()-0.5)*100);
-      ring.rotation.x = Math.random(); ring.rotation.y = Math.random();
-      worldGroup.add(ring);
+    
+    // Giant Glowing Pillars
+    for(let i=0; i<8; i++) {
+      const angle = (i/8) * Math.PI * 2;
+      const r = mapRadius * 0.6;
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 50), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff00ff, emissiveIntensity: 1.0 }));
+      p.position.set(Math.cos(angle)*r, 25, Math.sin(angle)*r); worldGroup.add(p);
+      obstacles.push({x: Math.cos(angle)*r, z: Math.sin(angle)*r, r: 5});
     }
   }
   
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, side: THREE.BackSide, transparent: true, opacity: 0.1, emissive: 0x00ffff, emissiveIntensity: 0.5 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, side: THREE.BackSide, transparent: true, opacity: 0.2, emissive: 0x00ffff, emissiveIntensity: 1.0 });
   const walls = new THREE.Mesh(new THREE.CylinderGeometry(mapRadius, mapRadius, 20, 64, 1, true), wallMat);
   walls.position.y = 10; worldGroup.add(walls);
 }
 
-// --- 5. CAR FACTORY ---
+// --- 5. CAR FACTORY (Cooler Cars) ---
 function createCarMesh(type, colorHex) {
   const g = new THREE.Group();
-  const paint = new THREE.MeshStandardMaterial({ color: colorHex, metalness: 0.8, roughness: 0.1 });
+  const paint = new THREE.MeshStandardMaterial({ color: colorHex, metalness: 0.9, roughness: 0.1 });
   const black = new THREE.MeshStandardMaterial({ color: 0x111111 });
   const glass = new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 1, roughness: 0 });
   
   let wheels = [];
-  const wGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16); wGeo.rotateZ(Math.PI/2);
+  const wGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.35, 16); wGeo.rotateZ(Math.PI/2);
+  const rimGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.36, 8); rimGeo.rotateZ(Math.PI/2);
+  
   [[1, 0.4, 1.3], [-1, 0.4, 1.3], [1, 0.4, -1.3], [-1, 0.4, -1.3]].forEach(p => {
     const w = new THREE.Mesh(wGeo, black);
+    const rim = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 1.0, roughness: 0.0}));
+    w.add(rim);
     w.position.set(p[0], p[1], p[2]); w.castShadow = true;
     g.add(w); wheels.push(w);
   });
 
+  // Base Body
   const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 4), paint); body.position.y = 0.65;
+  // Cabin
   const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 2), glass); cabin.position.set(0, 1.05, -0.2);
-  g.add(body, cabin);
+  // Headlights & Taillights
+  const hl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff })); hl.position.set(0, 0.65, 2.01); 
+  const tl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xff0000 })); tl.position.set(0, 0.65, -2.01);
+  
+  g.add(body, cabin, hl, tl);
 
+  // Custom Modifications
   if (type === 'lambo') {
     const wedge = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.2, 1.5), paint); wedge.position.set(0, 0.8, 1.3); wedge.rotation.x = -0.1; g.add(wedge);
-    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2, 0.1, 0.4), black); spoiler.position.set(0, 1.0, -2.0); g.add(spoiler);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.1, 0.4), black); spoiler.position.set(0, 1.0, -2.0); g.add(spoiler);
+    const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), black); s1.position.set(0.8, 0.8, -2.0); g.add(s1);
+    const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), black); s2.position.set(-0.8, 0.8, -2.0); g.add(s2);
   } else if (type === 'ae86') {
     const hood = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 1.2), black); hood.position.set(0, 0.85, 1.2); g.add(hood);
+    const skirtL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 3), black); skirtL.position.set(-1.0, 0.4, 0); g.add(skirtL);
+    const skirtR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 3), black); skirtR.position.set(1.0, 0.4, 0); g.add(skirtR);
   } else if (type === 'bugatti') {
     const nose = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 1.2), paint); nose.position.set(0, 0.75, 1.8); g.add(nose);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.51, 4.01), black); stripe.position.y = 0.65; g.add(stripe);
   } else if (type === 'redbull') {
     const accent = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.2, 4.05), new THREE.MeshStandardMaterial({color: 0xffcc00})); accent.position.y = 0.4; g.add(accent);
-    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2, 0.1, 0.5), black); spoiler.position.set(0, 1.0, -2.0); g.add(spoiler);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.1, 0.5), black); spoiler.position.set(0, 1.0, -2.0); g.add(spoiler);
   } else if (type === 'mustang') {
     const grill = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.3, 0.2), black); grill.position.set(0, 0.65, 2.0); g.add(grill);
+    const stripe1 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.51, 4.01), black); stripe1.position.set(-0.5, 0.65, 0); g.add(stripe1);
+    const stripe2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.51, 4.01), black); stripe2.position.set(0.5, 0.65, 0); g.add(stripe2);
   } else if (type === 'drift') {
-    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.1, 0.6), black); spoiler.position.set(0, 1.2, -2.0); g.add(spoiler);
-    const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.1), black); s1.position.set(0.8, 1.0, -2.0); g.add(s1);
-    const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.1), black); s2.position.set(-0.8, 1.0, -2.0); g.add(s2);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.1, 0.6), black); spoiler.position.set(0, 1.3, -2.0); g.add(spoiler);
+    const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), black); s1.position.set(0.9, 1.0, -2.0); g.add(s1);
+    const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), black); s2.position.set(-0.9, 1.0, -2.0); g.add(s2);
   } else if (type === 'pickup') {
     g.remove(cabin);
     const cab = new THREE.Mesh(new THREE.BoxGeometry(2, 0.8, 2), paint); cab.position.set(0, 1.0, 0.5);
@@ -366,9 +419,6 @@ function createCarMesh(type, colorHex) {
     const glassC = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 1), glass); glassC.position.set(0, 1.4, 0.5);
     g.add(cab, bed, glassC);
   }
-
-  const hl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff })); hl.position.set(0, 0.65, 2.01); g.add(hl);
-  const tl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xff0000 })); tl.position.set(0, 0.65, -2.01); g.add(tl);
 
   g.userData.wheels = wheels;
   return g;
@@ -421,7 +471,6 @@ class Car {
       
       if (keys.space) this.speed *= 0.95;
     } else {
-      // Bot AI Engine
       this.speed += this.accel * dt * 0.8; 
     }
 
@@ -436,15 +485,35 @@ class Car {
     if (distFromCenter > mapRadius - 2) {
       this.x = (this.x / distFromCenter) * (mapRadius - 2);
       this.z = (this.z / distFromCenter) * (mapRadius - 2);
-      this.speed *= -1.2; // Bounce back hard
+      
+      // Bounce logic
+      this.speed = -this.speed * 1.2; // Push back hard
+      this.angle += (Math.random() - 0.5) * 1.0; // Deflect angle slightly
+      
+      if (!this.isBot) {
+        // Screen shake or effect could go here
+      }
     }
+
+    // OBSTACLE COLLISIONS (Rocks, Buildings)
+    obstacles.forEach(obs => {
+      const dx = this.x - obs.x;
+      const dz = this.z - obs.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < obs.r + 2) {
+        // Push out of obstacle
+        this.x = obs.x + (dx / dist) * (obs.r + 2);
+        this.z = obs.z + (dz / dist) * (obs.r + 2);
+        this.speed = -this.speed * 0.5; // Slow down on hit
+      }
+    });
 
     this.mesh.position.set(this.x, 0, this.z);
     this.mesh.rotation.y = this.angle;
 
     this.mesh.userData.wheels.forEach(w => { w.rotation.x += this.speed * dt * 2; });
 
-    if (!this.isBot && gameState === 'PLAYING') {
+    if (!this.isBot && !isSpectator && gameState === 'PLAYING') {
       document.getElementById('speedo').innerHTML = Math.floor(Math.abs(this.speed) * 3.6) + ' <span>KM/H</span>';
     }
   }
@@ -460,14 +529,14 @@ function spawnExplosion(x, z, colorHex) {
   mesh.position.set(x, 1.5, z); scene.add(mesh);
   activeExplosions.push({ mesh, life: 1.0 });
 
-  for(let i=0; i<40; i++) {
+  for(let i=0; i<50; i++) {
     const pGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
     const pMat = new THREE.MeshBasicMaterial({ color: colorHex });
     const pMesh = new THREE.Mesh(pGeo, pMat);
     pMesh.position.set(x, 1.5, z);
-    pMesh.userData.vx = (Math.random() - 0.5) * 40;
-    pMesh.userData.vy = Math.random() * 30 + 10;
-    pMesh.userData.vz = (Math.random() - 0.5) * 40;
+    pMesh.userData.vx = (Math.random() - 0.5) * 50;
+    pMesh.userData.vy = Math.random() * 40 + 10;
+    pMesh.userData.vz = (Math.random() - 0.5) * 50;
     scene.add(pMesh);
     activeExplosions.push({ mesh: pMesh, life: 1.0, isParticle: true });
   }
@@ -476,6 +545,8 @@ function spawnExplosion(x, z, colorHex) {
 const players = [];
 let playerVehicle = null;
 let cameraMode = 0;
+let isSpectator = false;
+let spectateTarget = null;
 
 // --- 7. UI LOGIC ---
 function showScreen(id) {
@@ -573,14 +644,17 @@ function resetGame() {
   players.forEach(p => scene.remove(p.mesh));
   players.length = 0; playerVehicle = null; bombHolder = null;
   bombMesh.visible = false; bombArrow.visible = false;
-  bombTimer = 30; tagCooldown = 0;
+  bombTimer = 30; tagCooldown = 0; isSpectator = false; spectateTarget = null;
   activeExplosions.forEach(e => scene.remove(e.mesh)); activeExplosions = [];
 }
 
 window.startMatch = () => {
   showScreen(''); document.getElementById('hud').style.display = 'block';
   document.getElementById('clickOverlay').style.display = 'flex';
+  document.getElementById('spectateText').style.display = 'none';
+  document.getElementById('bombTimer').style.display = 'block';
   gameState = 'PLAYING';
+  isSpectator = false;
   
   if (previewCarGroup) { scene.remove(previewCarGroup); previewCarGroup = null; }
   buildMap(selectedMap);
@@ -596,7 +670,6 @@ window.startMatch = () => {
   }
   
   giveBomb(players[Math.floor(Math.random()*players.length)]);
-  document.getElementById('bombTimer').style.display = 'block';
 };
 
 function giveBomb(player) {
@@ -605,13 +678,13 @@ function giveBomb(player) {
   player.hasBomb = true;
   
   // FIX: Do NOT reset bombTimer here.
-  tagCooldown = 2.0; // 2 seconds grace period
+  tagCooldown = 2.0; 
   playTagSound();
   
   const flash = document.getElementById('flashOverlay');
   flash.style.opacity = 0.6; setTimeout(() => flash.style.opacity = 0, 100);
   
-  if (player === playerVehicle) {
+  if (player === playerVehicle && !isSpectator) {
     document.getElementById('bombPrompt').style.display = 'block';
   } else {
     document.getElementById('bombPrompt').style.display = 'none';
@@ -625,13 +698,31 @@ function explodeBomb() {
   spawnExplosion(bombHolder.x, bombHolder.z, effectData.color);
   
   const alive = players.filter(p => p.alive);
+  
+  // Check if PLAYER died
+  if (bombHolder === playerVehicle) {
+    isSpectator = true;
+    document.getElementById('spectateText').style.display = 'block';
+    document.getElementById('speedo').style.display = 'none';
+    document.getElementById('bombPrompt').style.display = 'none';
+    
+    // Pick a random bot to spectate
+    const aliveBots = alive.filter(p => p.isBot);
+    if (aliveBots.length > 0) spectateTarget = aliveBots[0];
+  }
+
+  // Check if match is over
   if (alive.length === 1) {
     setTimeout(() => {
       if (alive[0] === playerVehicle) {
         driftCoins += 100; updateCoins(); alert("YOU WIN! +100 Drift Coins");
-      } else { alert("You were eliminated!"); }
+      } else if (isSpectator) {
+        alert("Game Over! You were eliminated.");
+      } else {
+        alert("You were eliminated!");
+      }
       showScreen('lobbyScreen'); gameState = 'LOBBY'; resetGame(); updatePreviewCar(selectedCar);
-    }, 1000);
+    }, 1500);
     return;
   }
   
@@ -652,7 +743,14 @@ document.getElementById('clickOverlay').addEventListener('click', () => {
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if(['w','a','s','d',' '].includes(k)) keys[k === ' ' ? 'space' : k] = true;
-  if(k === 'c') cameraMode = (cameraMode + 1) % 3;
+  if(k === 'c') {
+    cameraMode = (cameraMode + 1) % 3;
+    if (isSpectator && players.filter(p=>p.alive && p.isBot).length > 0) {
+       const bots = players.filter(p=>p.alive && p.isBot);
+       let idx = bots.indexOf(spectateTarget);
+       spectateTarget = bots[(idx + 1) % bots.length];
+    }
+  }
 });
 window.addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
@@ -693,13 +791,12 @@ function animate() {
         document.getElementById('clickOverlay').style.display = 'flex';
       }
 
-      // 1. Bot AI Logic (Random Waypoints + Chase + Flee)
+      // 1. Bot AI Logic
       players.forEach(p => {
         if (p.isBot && p.alive) {
           let targetX = p.x, targetZ = p.z;
           
           if (p.hasBomb) {
-            // Chase closest player
             let nearest = null, minDist = Infinity;
             players.forEach(other => {
               if (other !== p && other.alive) {
@@ -709,21 +806,17 @@ function animate() {
             });
             if (nearest) { targetX = nearest.x; targetZ = nearest.z; }
           } else if (bombHolder) {
-            // Flee logic
             const distToBomb = Math.hypot(p.x - bombHolder.x, p.z - bombHolder.z);
             const distToWp = Math.hypot(p.x - p.wpX, p.z - p.wpZ);
             
-            // If bomb is close, or we reached our waypoint, pick a new waypoint in the middle of the map
             if (distToBomb < 30 || distToWp < 10) {
-              // Pick a random point away from the bomb
               let angleAway = Math.atan2(p.z - bombHolder.z, p.x - bombHolder.x);
-              angleAway += (Math.random() - 0.5) * 2; // Add randomness
+              angleAway += (Math.random() - 0.5) * 2; 
               
               let distAway = 30 + Math.random() * 30;
               p.wpX = p.x + Math.cos(angleAway) * distAway;
               p.wpZ = p.z + Math.sin(angleAway) * distAway;
               
-              // Clamp to a safe area so they don't get stuck on the wall
               const distWpCenter = Math.hypot(p.wpX, p.wpZ);
               if (distWpCenter > mapRadius - 20) {
                 p.wpX = (p.wpX / distWpCenter) * (mapRadius - 20);
@@ -733,7 +826,6 @@ function animate() {
             targetX = p.wpX; targetZ = p.wpZ;
           }
           
-          // Steer toward target
           const angleToTarget = Math.atan2(targetX - p.x, targetZ - p.z);
           let diff = angleToTarget - p.angle;
           while(diff > Math.PI) diff -= Math.PI*2;
@@ -743,7 +835,7 @@ function animate() {
         p.update(dt);
       });
 
-      // 2. Push apart overlapping cars (Fixes infinite tag swap)
+      // 2. Push apart overlapping cars
       for(let i=0; i<players.length; i++) {
         for(let j=i+1; j<players.length; j++) {
           const p1 = players[i], p2 = players[j];
@@ -752,7 +844,6 @@ function animate() {
             const dz = p2.z - p1.z;
             const dist = Math.hypot(dx, dz);
             if (dist < 4.5 && dist > 0) {
-              // Push them apart
               const pushX = (dx / dist) * 1.5;
               const pushZ = (dz / dist) * 1.5;
               p1.x -= pushX; p1.z -= pushZ;
@@ -762,7 +853,7 @@ function animate() {
         }
       }
 
-      // 3. Bomb Timer & Collision Logic
+      // 3. Bomb Logic
       if (bombHolder) {
         if (tagCooldown > 0) tagCooldown -= dt;
 
@@ -784,7 +875,7 @@ function animate() {
               const dist = Math.hypot(p.x - bombHolder.x, p.z - bombHolder.z);
               if (dist < 7.0) {
                 giveBomb(p);
-                break; // Break loop to prevent passing to multiple people instantly
+                break; 
               }
             }
           }
@@ -792,16 +883,23 @@ function animate() {
       }
       
       // 4. Camera Logic
-      if (playerVehicle && playerVehicle.alive) {
+      if (isSpectator && spectateTarget && spectateTarget.alive) {
+        // Spectator Camera
+        const pos = spectateTarget;
+        camera.position.set(pos.x - Math.sin(camAngle)*15, 8, pos.z - Math.cos(camAngle)*15);
+        camera.lookAt(pos.x, 1, pos.z);
+      } else if (playerVehicle && playerVehicle.alive) {
+        // Player Camera
+        const pos = playerVehicle;
         if (cameraMode === 0) { 
-          camera.position.set(playerVehicle.x - Math.sin(camAngle)*12, 6, playerVehicle.z - Math.cos(camAngle)*12);
-          camera.lookAt(playerVehicle.x, 1, playerVehicle.z);
+          camera.position.set(pos.x - Math.sin(camAngle)*12, 6, pos.z - Math.cos(camAngle)*12);
+          camera.lookAt(pos.x, 1, pos.z);
         } else if (cameraMode === 1) { 
-          camera.position.set(playerVehicle.x, 2, playerVehicle.z);
-          camera.lookAt(playerVehicle.x + Math.sin(camAngle)*10, 2, playerVehicle.z + Math.cos(camAngle)*10);
+          camera.position.set(pos.x, 2, pos.z);
+          camera.lookAt(pos.x + Math.sin(camAngle)*10, 2, pos.z + Math.cos(camAngle)*10);
         } else { 
-          camera.position.set(playerVehicle.x + Math.sin(playerVehicle.angle)*2, 2, playerVehicle.z + Math.cos(playerVehicle.angle)*2);
-          camera.lookAt(playerVehicle.x + Math.sin(playerVehicle.angle)*10, 2, playerVehicle.z + Math.cos(playerVehicle.angle)*10);
+          camera.position.set(pos.x + Math.sin(pos.angle)*2, 2, pos.z + Math.cos(pos.angle)*2);
+          camera.lookAt(pos.x + Math.sin(pos.angle)*10, 2, pos.z + Math.cos(pos.angle)*10);
         }
       }
     } else if (gameState === 'LOBBY') {
