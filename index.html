@@ -16,17 +16,17 @@
   #hud{position:fixed;inset:0;pointer-events:none;z-index:10;display:none}
   #topBar{position:absolute;top:20px;left:50%;transform:translateX(-50%);text-align:center;display:flex;flex-direction:column;align-items:center}
   #bombTimer{font-size:70px;font-weight:900;color:#ff0000;text-shadow:0 0 30px #ff0000;display:none;line-height:1;}
-  #bombPrompt{font-size:16px;color:#fff;text-shadow:0 2px 5px #000;background:rgba(255,0,0,0.9);padding:8px 20px;border-radius:20px;margin-top:5px;display:none;animation:pulse 0.5s infinite alternate;border:2px solid #fff;}
+  #bombPrompt{font-size:14px;color:#fff;text-shadow:0 2px 5px #000;background:rgba(255,0,0,0.9);padding:6px 15px;border-radius:20px;margin-top:5px;display:none;animation:pulse 0.5s infinite alternate;border:2px solid #fff;letter-spacing:1px;}
   @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }
   #speedo{position:absolute;bottom:30px;right:30px;font-size:50px;font-weight:900;font-style:italic;text-shadow:0 0 10px #00ffff}
   #speedo span{font-size:16px;color:#00ffff}
   
   /* Spectator Mode */
-  #spectateText{position:absolute;top:40%;left:50%;transform:translate(-50%, -50%);font-size:50px;font-weight:900;color:#fff;text-shadow:0 0 20px #ff0000;display:none;text-align:center}
-  #spectateSub{font-size:20px;color:#00ffff;margin-top:10px}
+  #spectateText{position:absolute;top:15%;left:50%;transform:translateX(-50%);font-size:50px;font-weight:900;color:#fff;text-shadow:0 0 20px #ff0000;display:none;text-align:center;width:100%;}
+  #spectateSub{font-size:20px;color:#00ffff;margin-top:10px;text-shadow:0 0 10px #00ffff;background:rgba(0,0,0,0.6);padding:10px 20px;border-radius:20px;display:inline-block;}
 
   /* Click to Play Overlay */
-  #clickOverlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.3);display:none;align-items:center;justify-content:center;font-size:50px;font-weight:900;color:#fff;text-shadow:0 0 20px #00ffff;cursor:pointer;backdrop-filter:blur(2px)}
+  #clickOverlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;font-size:50px;font-weight:900;color:#fff;text-shadow:0 0 20px #00ffff;cursor:pointer;backdrop-filter:blur(2px)}
   
   /* UI Screens */
   .screen{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,10,20,0.9);backdrop-filter:blur(10px);transition:opacity 0.3s}
@@ -107,7 +107,7 @@
     <div id="bombTimer">30</div>
     <div id="bombPrompt">YOU HAVE THE BOMB! RAM SOMEONE!</div>
   </div>
-  <div id="spectateText">YOU DIED!<div id="spectateSub">Spectating...</div></div>
+  <div id="spectateText">YOU DIED!<div id="spectateSub">Press C to switch targets</div></div>
   <div id="speedo">0 <span>KM/H</span></div>
 </div>
 
@@ -185,23 +185,17 @@ import * as THREE from 'three';
 // --- 1. AUDIO SYNTHESIZER ---
 let audioCtx;
 function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-
 function playTagSound() {
   if (!audioCtx) return;
-  const osc = audioCtx.createOscillator();
-  osc.type = 'square';
+  const osc = audioCtx.createOscillator(); osc.type = 'square';
   osc.frequency.setValueAtTime(600, audioCtx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
-  osc.connect(audioCtx.destination);
-  osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+  osc.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.1);
 }
-
 function playExplosionSound() {
   if (!audioCtx) return;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+  const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+  osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, audioCtx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
   gain.gain.setValueAtTime(1, audioCtx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
@@ -270,58 +264,69 @@ function buildMap(index) {
     // BEACH
     scene.background = new THREE.Color(0x87CEEB);
     scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ color: 0xe6d5b8, roughness: 0.9 }));
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ color: 0xf4e0a8, roughness: 0.9 }));
     floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
     
-    // Cooler Water
-    const water = new THREE.Mesh(new THREE.RingGeometry(mapRadius, mapRadius+100, 64), new THREE.MeshStandardMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8, metalness: 0.5, roughness: 0.1 }));
+    const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(15, 32, 32), new THREE.MeshBasicMaterial({ color: 0xffffaa }));
+    sunMesh.position.set(-100, 80, -100); worldGroup.add(sunMesh);
+    
+    const water = new THREE.Mesh(new THREE.RingGeometry(mapRadius, mapRadius+150, 64), new THREE.MeshStandardMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8, metalness: 0.9, roughness: 0.1 }));
     water.rotation.x = -Math.PI/2; water.position.y = -0.2; worldGroup.add(water);
     
-    // Palm Trees & Rocks
-    for(let i=0; i<15; i++) {
+    for(let i=0; i<16; i++) {
       const angle = Math.random() * Math.PI * 2;
       const r = Math.random() * (mapRadius - 20);
       const x = Math.cos(angle)*r; const z = Math.sin(angle)*r;
       
-      if (i % 2 === 0) {
-        // Tree
+      if (i % 3 === 0) {
         const tree = new THREE.Group();
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1, 15), new THREE.MeshStandardMaterial({ color: 0x5c4033 }));
-        trunk.position.y = 7.5; tree.add(trunk);
-        const leafMat = new THREE.MeshStandardMaterial({ color: 0x228822 });
-        for(let l=0; l<5; l++) {
-          const leaf = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 2), leafMat);
-          leaf.position.y = 15; leaf.rotation.y = (l/5)*Math.PI*2; leaf.rotation.x = Math.PI/4;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1, 18), new THREE.MeshStandardMaterial({ color: 0x6b4c3a }));
+        trunk.position.y = 9; tree.add(trunk);
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x2d8a2d });
+        for(let l=0; l<6; l++) {
+          const leaf = new THREE.Mesh(new THREE.BoxGeometry(10, 0.5, 2), leafMat);
+          leaf.position.y = 18; leaf.rotation.y = (l/6)*Math.PI*2; leaf.rotation.x = Math.PI/4;
           tree.add(leaf);
         }
         tree.position.set(x, 0, z); worldGroup.add(tree);
-        obstacles.push({x, z, r: 2});
-      } else {
-        // Rock
-        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(Math.random()*3+3), new THREE.MeshStandardMaterial({ color: 0x777777 }));
-        rock.position.set(x, 1.5, z); rock.rotation.set(Math.random(), Math.random(), Math.random());
+        obstacles.push({x, z, r: 2.5});
+      } else if (i % 3 === 1) {
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(Math.random()*4+3), new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 }));
+        rock.position.set(x, 2, z); rock.rotation.set(Math.random(), Math.random(), Math.random());
         worldGroup.add(rock);
-        obstacles.push({x, z, r: 4});
+        obstacles.push({x, z, r: 5});
+      } else {
+        const umb = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 4), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+        pole.position.y = 2; umb.add(pole);
+        const top = new THREE.Mesh(new THREE.ConeGeometry(4, 2, 8), new THREE.MeshStandardMaterial({ color: Math.random()>0.5?0xff0000:0x00ff00 }));
+        top.position.y = 4; umb.add(top);
+        umb.position.set(x, 0, z); worldGroup.add(umb);
       }
     }
   } 
   else if (index === 1) {
     // CITY
-    scene.background = new THREE.Color(0xff7e5f);
-    scene.fog = new THREE.Fog(0xff7e5f, 50, 150);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 }));
+    scene.background = new THREE.Color(0x0a0a1a);
+    scene.fog = new THREE.Fog(0x0a0a1a, 50, 150);
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.2 }));
     floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
     
-    // Neon Skyscrapers inside the arena
+    for(let i=0; i<200; i++) {
+      const star = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      star.position.set((Math.random()-0.5)*200, Math.random()*50+20, (Math.random()-0.5)*200);
+      worldGroup.add(star);
+    }
+
     for(let i=0; i<10; i++) {
       const angle = (i/10) * Math.PI * 2;
-      const r = Math.random() * (mapRadius - 20) + 10;
-      const h = Math.random() * 50 + 20;
-      const w = Math.random() * 10 + 8;
+      const r = Math.random() * (mapRadius - 30) + 15;
+      const h = Math.random() * 60 + 30;
+      const w = Math.random() * 12 + 8;
       const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial({ color: 0x111122 }));
-      b.position.set(Math.cos(angle)*r, h/2, Math.sin(angle)*r); worldGroup.add(b);
+      b.position.set(Math.cos(angle)*r, h/2, Math.sin(angle)*r); b.castShadow = true; worldGroup.add(b);
       
-      const neon = new THREE.Mesh(new THREE.BoxGeometry(w+1, 2, w+1), new THREE.MeshBasicMaterial({ color: Math.random()>0.5?0xff00ff:0x00ffff }));
+      const neon = new THREE.Mesh(new THREE.BoxGeometry(w+0.5, 2, w+0.5), new THREE.MeshBasicMaterial({ color: Math.random()>0.5?0xff00ff:0x00ffff }));
       neon.position.set(Math.cos(angle)*r, Math.random()*h, Math.sin(angle)*r); worldGroup.add(neon);
       
       obstacles.push({x: Math.cos(angle)*r, z: Math.sin(angle)*r, r: w/1.5});
@@ -334,32 +339,38 @@ function buildMap(index) {
     const gridC = document.createElement('canvas'); gridC.width=512; gridC.height=512;
     const gCtx = gridC.getContext('2d');
     gCtx.fillStyle = '#000'; gCtx.fillRect(0,0,512,512);
-    gCtx.strokeStyle = '#00ffff'; gCtx.lineWidth = 4;
+    gCtx.strokeStyle = '#00ffff'; gCtx.lineWidth = 3;
     for(let i=0; i<=512; i+=64) {
       gCtx.beginPath(); gCtx.moveTo(i,0); gCtx.lineTo(i,512); gCtx.stroke();
       gCtx.beginPath(); gCtx.moveTo(0,i); gCtx.lineTo(512,i); gCtx.stroke();
     }
     const gridTex = new THREE.CanvasTexture(gridC);
     gridTex.wrapS = gridTex.wrapT = THREE.RepeatWrapping; gridTex.repeat.set(10, 10);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ map: gridTex, emissive: 0x00ffff, emissiveIntensity: 0.5 }));
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(mapRadius, 64), new THREE.MeshStandardMaterial({ map: gridTex, emissive: 0x00ffff, emissiveIntensity: 0.6 }));
     floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
     
-    // Giant Glowing Pillars
+    for(let i=0; i<3; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(60, 2, 16, 64), new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.3 }));
+      ring.position.set(0, 30 + i*10, 0);
+      ring.rotation.x = Math.random(); ring.rotation.y = Math.random();
+      worldGroup.add(ring);
+    }
+
     for(let i=0; i<8; i++) {
       const angle = (i/8) * Math.PI * 2;
       const r = mapRadius * 0.6;
-      const p = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 50), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff00ff, emissiveIntensity: 1.0 }));
-      p.position.set(Math.cos(angle)*r, 25, Math.sin(angle)*r); worldGroup.add(p);
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 60), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x00ffff, emissiveIntensity: 1.0 }));
+      p.position.set(Math.cos(angle)*r, 30, Math.sin(angle)*r); worldGroup.add(p);
       obstacles.push({x: Math.cos(angle)*r, z: Math.sin(angle)*r, r: 5});
     }
   }
   
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, side: THREE.BackSide, transparent: true, opacity: 0.2, emissive: 0x00ffff, emissiveIntensity: 1.0 });
-  const walls = new THREE.Mesh(new THREE.CylinderGeometry(mapRadius, mapRadius, 20, 64, 1, true), wallMat);
-  walls.position.y = 10; worldGroup.add(walls);
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, side: THREE.BackSide, transparent: true, opacity: 0.1, emissive: 0x00ffff, emissiveIntensity: 1.0 });
+  const walls = new THREE.Mesh(new THREE.CylinderGeometry(mapRadius, mapRadius, 40, 64, 1, true), wallMat);
+  walls.position.y = 20; worldGroup.add(walls);
 }
 
-// --- 5. CAR FACTORY (Cooler Cars) ---
+// --- 5. CAR FACTORY ---
 function createCarMesh(type, colorHex) {
   const g = new THREE.Group();
   const paint = new THREE.MeshStandardMaterial({ color: colorHex, metalness: 0.9, roughness: 0.1 });
@@ -378,36 +389,25 @@ function createCarMesh(type, colorHex) {
     g.add(w); wheels.push(w);
   });
 
-  // Base Body
   const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 4), paint); body.position.y = 0.65;
-  // Cabin
   const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 2), glass); cabin.position.set(0, 1.05, -0.2);
-  // Headlights & Taillights
   const hl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff })); hl.position.set(0, 0.65, 2.01); 
   const tl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xff0000 })); tl.position.set(0, 0.65, -2.01);
   
   g.add(body, cabin, hl, tl);
 
-  // Custom Modifications
   if (type === 'lambo') {
     const wedge = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.2, 1.5), paint); wedge.position.set(0, 0.8, 1.3); wedge.rotation.x = -0.1; g.add(wedge);
     const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.1, 0.4), black); spoiler.position.set(0, 1.0, -2.0); g.add(spoiler);
-    const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), black); s1.position.set(0.8, 0.8, -2.0); g.add(s1);
-    const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), black); s2.position.set(-0.8, 0.8, -2.0); g.add(s2);
   } else if (type === 'ae86') {
     const hood = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 1.2), black); hood.position.set(0, 0.85, 1.2); g.add(hood);
-    const skirtL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 3), black); skirtL.position.set(-1.0, 0.4, 0); g.add(skirtL);
-    const skirtR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 3), black); skirtR.position.set(1.0, 0.4, 0); g.add(skirtR);
   } else if (type === 'bugatti') {
     const nose = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 1.2), paint); nose.position.set(0, 0.75, 1.8); g.add(nose);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.51, 4.01), black); stripe.position.y = 0.65; g.add(stripe);
   } else if (type === 'redbull') {
     const accent = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.2, 4.05), new THREE.MeshStandardMaterial({color: 0xffcc00})); accent.position.y = 0.4; g.add(accent);
     const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.1, 0.5), black); spoiler.position.set(0, 1.0, -2.0); g.add(spoiler);
   } else if (type === 'mustang') {
     const grill = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.3, 0.2), black); grill.position.set(0, 0.65, 2.0); g.add(grill);
-    const stripe1 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.51, 4.01), black); stripe1.position.set(-0.5, 0.65, 0); g.add(stripe1);
-    const stripe2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.51, 4.01), black); stripe2.position.set(0.5, 0.65, 0); g.add(stripe2);
   } else if (type === 'drift') {
     const spoiler = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.1, 0.6), black); spoiler.position.set(0, 1.3, -2.0); g.add(spoiler);
     const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), black); s1.position.set(0.9, 1.0, -2.0); g.add(s1);
@@ -447,9 +447,10 @@ class Car {
     this.maxSpeed = data.speed;
     this.accel = 30;
     this.friction = 15;
+    this.stuckTimer = 0;
     
     this.alive = true; this.hasBomb = false;
-    this.wpX = x; this.wpZ = z; // Waypoint for bots
+    this.wpX = x; this.wpZ = z;
   }
   
   update(dt) {
@@ -471,7 +472,20 @@ class Car {
       
       if (keys.space) this.speed *= 0.95;
     } else {
-      this.speed += this.accel * dt * 0.8; 
+      // Bot Unstuck Logic
+      if (Math.abs(this.speed) < 2) {
+        this.stuckTimer += dt;
+      } else {
+        this.stuckTimer = 0;
+      }
+      
+      if (this.stuckTimer > 1.0) {
+        this.angle += (Math.random() > 0.5 ? 1 : -1) * Math.PI / 2;
+        this.speed = -20; 
+        this.stuckTimer = 0;
+      } else {
+        this.speed += this.accel * dt * 0.8; 
+      }
     }
 
     this.speed = Math.max(-this.maxSpeed/2, Math.min(this.maxSpeed, this.speed));
@@ -480,31 +494,29 @@ class Car {
     this.x += Math.sin(this.angle) * this.speed * dt;
     this.z += Math.cos(this.angle) * this.speed * dt;
 
-    // BOUNCY WALLS
+    // Bouncy Outer Walls
     const distFromCenter = Math.hypot(this.x, this.z);
     if (distFromCenter > mapRadius - 2) {
       this.x = (this.x / distFromCenter) * (mapRadius - 2);
       this.z = (this.z / distFromCenter) * (mapRadius - 2);
-      
-      // Bounce logic
-      this.speed = -this.speed * 1.2; // Push back hard
-      this.angle += (Math.random() - 0.5) * 1.0; // Deflect angle slightly
-      
-      if (!this.isBot) {
-        // Screen shake or effect could go here
-      }
+      this.speed = -this.speed * 1.2; 
+      this.angle += (Math.random() - 0.5) * 1.0;
     }
 
-    // OBSTACLE COLLISIONS (Rocks, Buildings)
+    // Solid Obstacle Collision
     obstacles.forEach(obs => {
-      const dx = this.x - obs.x;
-      const dz = this.z - obs.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < obs.r + 2) {
-        // Push out of obstacle
-        this.x = obs.x + (dx / dist) * (obs.r + 2);
-        this.z = obs.z + (dz / dist) * (obs.r + 2);
-        this.speed = -this.speed * 0.5; // Slow down on hit
+      let dx = this.x - obs.x;
+      let dz = this.z - obs.z;
+      let dist = Math.hypot(dx, dz);
+      let minDist = obs.r + 2.0; 
+      
+      if (dist === 0) { dx = 0.1; dz = 0.1; dist = 0.141; }
+
+      if (dist < minDist) {
+        this.x = obs.x + (dx / dist) * minDist;
+        this.z = obs.z + (dz / dist) * minDist;
+        this.speed = -this.speed * 0.5;
+        this.angle += (Math.random() - 0.5) * 0.5;
       }
     });
 
@@ -546,7 +558,10 @@ const players = [];
 let playerVehicle = null;
 let cameraMode = 0;
 let isSpectator = false;
+let spectateMode = 0; // 0 = follow bot, 1 = free fly
 let spectateTarget = null;
+let spectateCamPos = new THREE.Vector3(0, 30, 30);
+let spectateCamAngle = 0;
 
 // --- 7. UI LOGIC ---
 function showScreen(id) {
@@ -645,6 +660,7 @@ function resetGame() {
   players.length = 0; playerVehicle = null; bombHolder = null;
   bombMesh.visible = false; bombArrow.visible = false;
   bombTimer = 30; tagCooldown = 0; isSpectator = false; spectateTarget = null;
+  document.getElementById('spectateText').style.display = 'none';
   activeExplosions.forEach(e => scene.remove(e.mesh)); activeExplosions = [];
 }
 
@@ -653,8 +669,10 @@ window.startMatch = () => {
   document.getElementById('clickOverlay').style.display = 'flex';
   document.getElementById('spectateText').style.display = 'none';
   document.getElementById('bombTimer').style.display = 'block';
+  document.getElementById('speedo').style.display = 'block';
   gameState = 'PLAYING';
   isSpectator = false;
+  spectateTarget = null;
   
   if (previewCarGroup) { scene.remove(previewCarGroup); previewCarGroup = null; }
   buildMap(selectedMap);
@@ -677,7 +695,6 @@ function giveBomb(player) {
   bombHolder = player;
   player.hasBomb = true;
   
-  // FIX: Do NOT reset bombTimer here.
   tagCooldown = 2.0; 
   playTagSound();
   
@@ -691,6 +708,19 @@ function giveBomb(player) {
   }
 }
 
+function cycleSpectateTarget() {
+  if (!isSpectator) return;
+  const aliveBots = players.filter(p => p.alive && p.isBot);
+  if (aliveBots.length === 0) return;
+  
+  let currentIndex = aliveBots.indexOf(spectateTarget);
+  let nextIndex = (currentIndex + 1) % aliveBots.length;
+  spectateTarget = aliveBots[nextIndex];
+  
+  // Update UI with car name
+  document.getElementById('spectateSub').innerText = `Spectating: ${spectateTarget.data.name} (Press C to switch)`;
+}
+
 function explodeBomb() {
   bombHolder.alive = false; bombHolder.mesh.visible = false;
   
@@ -699,19 +729,21 @@ function explodeBomb() {
   
   const alive = players.filter(p => p.alive);
   
-  // Check if PLAYER died
+  // Activate Spectator Mode if Player died
   if (bombHolder === playerVehicle) {
     isSpectator = true;
+    spectateMode = 0; // Default to follow mode
     document.getElementById('spectateText').style.display = 'block';
     document.getElementById('speedo').style.display = 'none';
     document.getElementById('bombPrompt').style.display = 'none';
     
-    // Pick a random bot to spectate
-    const aliveBots = alive.filter(p => p.isBot);
-    if (aliveBots.length > 0) spectateTarget = aliveBots[0];
+    // Auto-target first bot
+    spectateTarget = alive.find(p => p.isBot);
+    if (spectateTarget) {
+      document.getElementById('spectateSub').innerText = `Spectating: ${spectateTarget.data.name} (Press C to switch)`;
+    }
   }
 
-  // Check if match is over
   if (alive.length === 1) {
     setTimeout(() => {
       if (alive[0] === playerVehicle) {
@@ -726,13 +758,12 @@ function explodeBomb() {
     return;
   }
   
-  // Reset timer for the NEXT bomb
   bombTimer = 30; 
   giveBomb(alive[Math.floor(Math.random()*alive.length)]);
 }
 
 // --- 9. CONTROLS ---
-const keys = { w: false, a: false, s: false, d: false, space: false };
+const keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
 let camAngle = 0;
 
 document.getElementById('clickOverlay').addEventListener('click', () => {
@@ -742,22 +773,36 @@ document.getElementById('clickOverlay').addEventListener('click', () => {
 
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  if(['w','a','s','d',' '].includes(k)) keys[k === ' ' ? 'space' : k] = true;
+  if(['w','a','s','d',' ','shift'].includes(k)) keys[k === ' ' ? 'space' : k] = true;
+  
   if(k === 'c') {
-    cameraMode = (cameraMode + 1) % 3;
-    if (isSpectator && players.filter(p=>p.alive && p.isBot).length > 0) {
-       const bots = players.filter(p=>p.alive && p.isBot);
-       let idx = bots.indexOf(spectateTarget);
-       spectateTarget = bots[(idx + 1) % bots.length];
+    if (isSpectator) {
+      cycleSpectateTarget(); // Switch bot
+    } else {
+      cameraMode = (cameraMode + 1) % 3;
+    }
+  }
+  
+  if(k === 'v' && isSpectator) {
+    // Toggle between Follow and Free Fly
+    spectateMode = spectateMode === 0 ? 1 : 0;
+    if (spectateMode === 1) {
+      spectateCamPos.set(spectateTarget ? spectateTarget.x : 0, 30, spectateTarget ? spectateTarget.z + 20 : 20);
+      document.getElementById('spectateSub').innerText = "Free-Fly Mode (Press V to lock back on)";
+    } else {
+      cycleSpectateTarget();
     }
   }
 });
 window.addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
-  if(['w','a','s','d',' '].includes(k)) keys[k === ' ' ? 'space' : k] = false;
+  if(['w','a','s','d',' ','shift'].includes(k)) keys[k === ' ' ? 'space' : k] = false;
 });
 document.addEventListener('mousemove', e => {
-  if (document.pointerLockElement === renderer.domElement) camAngle -= e.movementX * 0.002;
+  if (document.pointerLockElement === renderer.domElement) {
+    if (isSpectator && spectateMode === 1) spectateCamAngle -= e.movementX * 0.002;
+    else camAngle -= e.movementX * 0.002;
+  }
 });
 
 // --- 10. MAIN LOOP ---
@@ -791,7 +836,7 @@ function animate() {
         document.getElementById('clickOverlay').style.display = 'flex';
       }
 
-      // 1. Bot AI Logic
+      // 1. Bot AI Logic (With Obstacle Avoidance)
       players.forEach(p => {
         if (p.isBot && p.alive) {
           let targetX = p.x, targetZ = p.z;
@@ -826,7 +871,20 @@ function animate() {
             targetX = p.wpX; targetZ = p.wpZ;
           }
           
-          const angleToTarget = Math.atan2(targetX - p.x, targetZ - p.z);
+          // --- OBSTACLE AVOIDANCE ---
+          let avoidX = 0, avoidZ = 0;
+          obstacles.forEach(obs => {
+            const d = Math.hypot(p.x - obs.x, p.z - obs.z);
+            if (d < obs.r + 15) {
+              avoidX += (p.x - obs.x) / (d || 1);
+              avoidZ += (p.z - obs.z) / (d || 1);
+            }
+          });
+          
+          let dirX = (targetX - p.x) + (avoidX * 40);
+          let dirZ = (targetZ - p.z) + (avoidZ * 40);
+          
+          const angleToTarget = Math.atan2(dirX, dirZ);
           let diff = angleToTarget - p.angle;
           while(diff > Math.PI) diff -= Math.PI*2;
           while(diff < -Math.PI) diff += Math.PI*2;
@@ -883,13 +941,41 @@ function animate() {
       }
       
       // 4. Camera Logic
-      if (isSpectator && spectateTarget && spectateTarget.alive) {
-        // Spectator Camera
-        const pos = spectateTarget;
-        camera.position.set(pos.x - Math.sin(camAngle)*15, 8, pos.z - Math.cos(camAngle)*15);
-        camera.lookAt(pos.x, 1, pos.z);
+      if (isSpectator) {
+        if (spectateMode === 1) {
+          // Free Fly
+          const flySpeed = keys.shift ? 60 : 30;
+          const forward = new THREE.Vector3(Math.sin(spectateCamAngle), 0, Math.cos(spectateCamAngle));
+          const right = new THREE.Vector3(Math.cos(spectateCamAngle), 0, -Math.sin(spectateCamAngle));
+
+          if (keys.w) spectateCamPos.addScaledVector(forward, flySpeed * dt);
+          if (keys.s) spectateCamPos.addScaledVector(forward, -flySpeed * dt);
+          if (keys.a) spectateCamPos.addScaledVector(right, -flySpeed * dt);
+          if (keys.d) spectateCamPos.addScaledVector(right, flySpeed * dt);
+          if (keys.space) spectateCamPos.y += flySpeed * dt; 
+          
+          camera.position.copy(spectateCamPos);
+          camera.lookAt(spectateCamPos.x + forward.x*10, spectateCamPos.y, spectateCamPos.z + forward.z*10);
+        } else {
+          // Follow Target
+          if (!spectateTarget || !spectateTarget.alive) {
+            // Auto switch if target dies
+            const alive = players.filter(p => p.alive && p.isBot);
+            if (alive.length > 0) {
+              spectateTarget = alive[0];
+              document.getElementById('spectateSub').innerText = `Spectating: ${spectateTarget.data.name} (Press C to switch)`;
+            }
+          }
+          
+          if (spectateTarget && spectateTarget.alive) {
+            const camDist = 12;
+            camera.position.x = spectateTarget.x - Math.sin(spectateTarget.angle) * camDist;
+            camera.position.z = spectateTarget.z - Math.cos(spectateTarget.angle) * camDist;
+            camera.position.y = 6;
+            camera.lookAt(spectateTarget.x, 1, spectateTarget.z);
+          }
+        }
       } else if (playerVehicle && playerVehicle.alive) {
-        // Player Camera
         const pos = playerVehicle;
         if (cameraMode === 0) { 
           camera.position.set(pos.x - Math.sin(camAngle)*12, 6, pos.z - Math.cos(camAngle)*12);
